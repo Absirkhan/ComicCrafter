@@ -223,23 +223,35 @@ Respond with only the JSON array, no additional text."""
         
         context = "\n".join(context_parts)
         
-        prompt = f"""Based on these scenes, create a detailed character description for "{character_name}".
+        prompt = f"""Based on these scenes, create a HIGHLY DETAILED character description for "{character_name}".
 
 Context:
 {context}
 
-Provide:
-1. Physical appearance (for visual consistency in comic generation)
+Provide SPECIFIC, CONCRETE visual details for maximum consistency across multiple AI-generated images:
+
+1. Physical appearance - BE EXTREMELY SPECIFIC:
+   - Exact face shape (oval, square, heart-shaped, etc.)
+   - Eye color, shape, and distinctive features
+   - Nose shape and size
+   - Mouth shape and lip fullness
+   - Skin tone (be specific: pale, tan, dark, etc.)
+   - Hair color, length, style, texture
+   - Body type and height
+   - Distinctive features (scars, glasses, freckles, etc.)
+   - Clothing style and colors
+
 2. Personality traits
 3. Role in the story
 
 Format your response as JSON:
 {{
-    "appearance": "Detailed physical description",
+    "appearance": "VERY DETAILED physical description with SPECIFIC features",
     "personality": "Personality traits",
     "role": "Character's role"
 }}
 
+CRITICAL: The appearance must be detailed enough that an artist could draw the SAME FACE twice.
 Respond with only the JSON, no additional text."""
         
         try:

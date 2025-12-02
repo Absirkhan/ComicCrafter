@@ -88,6 +88,26 @@ class PromptAgent:
         # Build base prompt from scene
         prompt_parts = []
         
+        # Get character contexts FIRST for consistency
+        character_contexts = []
+        character_descriptions = []
+        for char_name in scene.characters:
+            character = self.character_memory.get_character(char_name)
+            if character:
+                # Extract detailed visual features for consistency
+                char_desc = f"{char_name} ({character.appearance})"
+                character_descriptions.append(char_desc)
+                context = self.character_memory.get_character_context(
+                    char_name,
+                    scene.description
+                )
+                if context:
+                    character_contexts.append(context)
+        
+        # Add character descriptions at the START for emphasis
+        if character_descriptions:
+            prompt_parts.append(f"Characters: {', '.join(character_descriptions)}")
+        
         # Add setting/location
         if scene.setting:
             prompt_parts.append(f"Setting: {scene.setting}")
@@ -98,24 +118,14 @@ class PromptAgent:
         else:
             prompt_parts.append(f"Scene: {scene.description}")
         
-        # Get character contexts
-        character_contexts = []
-        for char_name in scene.characters:
-            context = self.character_memory.get_character_context(
-                char_name,
-                scene.description
-            )
-            if context:
-                character_contexts.append(f"{char_name}: {context}")
-        
         # Combine character contexts
         character_context = ", ".join(character_contexts) if character_contexts else ""
         
         # Use LLM to enhance prompt
         base_prompt = ", ".join(prompt_parts)
-        enhanced_prompt = self._enhance_prompt(base_prompt, scene, style)
+        enhanced_prompt = self._enhance_prompt(base_prompt, scene, style, character_descriptions)
         
-        # Create negative prompt
+        # Create negative prompt with consistency enforcements
         negative_prompt = self._create_negative_prompt()
         
         logger.debug(f"Generated prompt for scene {scene_index}: {enhanced_prompt[:100]}")
@@ -131,7 +141,8 @@ class PromptAgent:
         self,
         base_prompt: str,
         scene: Scene,
-        style: str
+        style: str,
+        character_descriptions: List[str] = None
     ) -> str:
         """Enhance prompt using LLM.
         
@@ -139,34 +150,41 @@ class PromptAgent:
             base_prompt: Base prompt text
             scene: Scene object
             style: Visual style
+            character_descriptions: List of detailed character descriptions
             
         Returns:
             Enhanced prompt
         """
-        enhancement_prompt = f"""You are an expert at creating image generation prompts for comic books.
+        char_emphasis = ""
+        if character_descriptions:
+            char_emphasis = f"\n\nCRITICAL - Character Consistency (maintain EXACT appearance):\n" + "\n".join(character_descriptions)
+        
+        enhancement_prompt = f"""You are an expert at creating image generation prompts for comic books with consistent character appearance.
 
 Scene Description: {scene.description}
 Setting: {scene.setting}
 Action: {scene.action}
-Characters: {', '.join(scene.characters)}
+Characters: {', '.join(scene.characters)}{char_emphasis}
 
 Base prompt: {base_prompt}
 Style: {style}
 
 Create a detailed, vivid image generation prompt that:
-1. Describes the visual composition
-2. Captures the mood and atmosphere
-3. Specifies camera angle and framing
-4. Includes the style "{style}"
-5. Is optimized for image generation AI (be specific about visual elements)
+1. MAINTAINS EXACT character appearance descriptions (hair, face, clothing, body type)
+2. Describes the visual composition and scene
+3. Captures the mood and atmosphere
+4. Specifies camera angle and framing
+5. Includes the style "{style}"
+6. Uses phrases like "same character as before" or "consistent appearance"
 
+IMPORTANT: Keep character visual descriptions IDENTICAL across all scenes.
 Keep it under 150 words. Respond with only the prompt, no additional text."""
         
         try:
             enhanced = self.llm.generate_text(
                 enhancement_prompt,
                 max_tokens=256,
-                temperature=0.8
+                temperature=0.7  # Lower temperature for more consistency
             )
             return enhanced.strip()
         except Exception as e:
@@ -174,7 +192,7 @@ Keep it under 150 words. Respond with only the prompt, no additional text."""
             return f"{base_prompt}, {style}"
     
     def _create_negative_prompt(self) -> str:
-        """Create a standard negative prompt.
+        """Create a standard negative prompt with character consistency enforcement.
         
         Returns:
             Negative prompt string
@@ -182,7 +200,9 @@ Keep it under 150 words. Respond with only the prompt, no additional text."""
         return (
             "blurry, low quality, distorted, deformed, ugly, bad anatomy, "
             "bad proportions, watermark, signature, text, out of frame, "
-            "multiple panels, speech bubbles"
+            "multiple panels, speech bubbles, "
+            "different face, inconsistent appearance, changing features, "
+            "multiple different people, varying character design"
         )
     
     def refine_prompt_for_character(

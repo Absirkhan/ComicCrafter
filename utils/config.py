@@ -38,7 +38,7 @@ class Config(BaseModel):
         default_factory=lambda: os.getenv("DEFAULT_LLM_MODEL", "llama-3.3-70b-versatile")
     )
     default_image_model: str = Field(
-        default_factory=lambda: os.getenv("DEFAULT_IMAGE_MODEL", "black-forest-labs/FLUX.1-dev")
+        default_factory=lambda: os.getenv("DEFAULT_IMAGE_MODEL", "runwayml/stable-diffusion-v1-5")
     )
     gemini_model: str = Field(
         default_factory=lambda: os.getenv("GEMINI_MODEL", "gemini-2.0-flash-exp")

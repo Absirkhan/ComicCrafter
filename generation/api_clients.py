@@ -4,6 +4,8 @@ from typing import Optional, Dict, Any
 import requests
 from abc import ABC, abstractmethod
 from groq import Groq
+from huggingface_hub import InferenceClient
+from io import BytesIO
 from utils import get_config, get_logger
 
 logger = get_logger(__name__)
@@ -164,8 +166,8 @@ class HuggingFaceClient:
         if not self.token:
             raise ValueError("HuggingFace token not provided")
         
-        self.api_url = f"https://api-inference.huggingface.co/models/{self.model}"
-        self.headers = {"Authorization": f"Bearer {self.token}"}
+        # Use huggingface_hub InferenceClient for better compatibility
+        self.client = InferenceClient(token=self.token)
         logger.info(f"Initialized HuggingFaceClient with model: {self.model}")
     
     def generate_image(
@@ -189,29 +191,58 @@ class HuggingFaceClient:
             Image data as bytes
         """
         try:
-            payload = {
-                "inputs": prompt,
-                "parameters": {
-                    "num_inference_steps": num_inference_steps,
-                    "guidance_scale": guidance_scale,
-                }
-            }
-            
+            # Use the InferenceClient's text_to_image method
+            # Keep it simple like the working example - only pass essential parameters
             if negative_prompt:
-                payload["parameters"]["negative_prompt"] = negative_prompt
+                image = self.client.text_to_image(
+                    prompt,
+                    model=self.model,
+                    negative_prompt=negative_prompt
+                )
+            else:
+                image = self.client.text_to_image(
+                    prompt,
+                    model=self.model
+                )
             
-            response = requests.post(
-                self.api_url,
-                headers=self.headers,
-                json=payload,
-                timeout=60
-            )
-            response.raise_for_status()
+            # Convert PIL Image to bytes
+            buffer = BytesIO()
+            image.save(buffer, format='PNG')
+            image_bytes = buffer.getvalue()
             
             logger.debug(f"Generated image for prompt: {prompt[:50]}...")
-            return response.content
+            return image_bytes
+        except StopIteration as e:
+            # Handle empty response from API
+            error_msg = (
+                f"HuggingFace API returned empty response. This usually means:\n"
+                f"  1. Model '{self.model}' is not available or still loading\n"
+                f"  2. Your HuggingFace token doesn't have proper permissions\n"
+                f"  3. API rate limits exceeded\n"
+                f"Try using model: 'stabilityai/stable-diffusion-xl-base-1.0'"
+            )
+            logger.error(f"StopIteration error: {error_msg}")
+            raise RuntimeError(error_msg) from e
         except Exception as e:
-            logger.error(f"Error generating image with HuggingFace: {e}")
+            error_msg = str(e)
+            error_type = type(e).__name__
+            
+            # Provide detailed error information
+            logger.error(
+                f"Error generating image with HuggingFace ({error_type}): {error_msg}\n"
+                f"Model: {self.model}\n"
+                f"Prompt: {prompt[:100]}..."
+            )
+            
+            if "410" in error_msg or "Gone" in error_msg or "does not exist" in error_msg.lower():
+                logger.error(
+                    f"Model '{self.model}' is not available on HuggingFace Inference API. "
+                    f"Try updating DEFAULT_IMAGE_MODEL in .env to one of: "
+                    f"'stabilityai/stable-diffusion-xl-base-1.0', "
+                    f"'stabilityai/stable-diffusion-2-1', "
+                    f"'prompthero/openjourney'"
+                )
+            
             raise
     
     def generate_text(
