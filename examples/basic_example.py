@@ -1,14 +1,18 @@
 """Basic example of using ComicCrafter to generate a comic from text."""
 
 import os
+import sys
 from pathlib import Path
 from dotenv import load_dotenv
+
+# Add parent directory to path
+sys.path.insert(0, str(Path(__file__).parent.parent))
 
 # Load environment variables
 load_dotenv()
 
 # Import ComicCrafter
-from comiccrafter import ComicCrafter
+from core import ComicCrafter
 
 # Example story
 EXAMPLE_STORY = """

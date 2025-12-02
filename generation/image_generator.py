@@ -32,7 +32,19 @@ class ImageGenerator:
         self.client = image_client or HuggingFaceClient()
         self.width = width or config.image_width
         self.height = height or config.image_height
+        # Store reference images for character consistency
+        self.character_references: Dict[str, Image.Image] = {}
         logger.info(f"Initialized ImageGenerator ({self.width}x{self.height})")
+    
+    def set_character_reference(self, character_name: str, image: Image.Image) -> None:
+        """Store a reference image for a character.
+        
+        Args:
+            character_name: Name of the character
+            image: Reference image
+        """
+        self.character_references[character_name] = image
+        logger.info(f"Stored reference image for character: {character_name}")
     
     def generate_panel(
         self,
@@ -40,6 +52,7 @@ class ImageGenerator:
         character_context: Optional[str] = None,
         style_tags: Optional[List[str]] = None,
         negative_prompt: Optional[str] = None,
+        characters: Optional[List[str]] = None,
         **kwargs
     ) -> Image.Image:
         """Generate a single comic panel image.
@@ -49,13 +62,22 @@ class ImageGenerator:
             character_context: Additional character consistency context
             style_tags: Style tags to append to prompt
             negative_prompt: Negative prompt for guidance
+            characters: List of character names in this panel
             **kwargs: Additional generation parameters
             
         Returns:
             Generated PIL Image
         """
-        # Build enhanced prompt
-        enhanced_prompt = self._build_prompt(prompt, character_context, style_tags)
+        # Check if we have reference images for any characters
+        reference_note = ""
+        if characters:
+            for char_name in characters:
+                if char_name in self.character_references:
+                    reference_note = f" [IMPORTANT: Maintain exact same facial features and appearance as {char_name}'s established look - same face shape, eyes, nose, mouth, skin tone]"
+                    break
+        
+        # Build enhanced prompt with reference information
+        enhanced_prompt = self._build_prompt(prompt, character_context, style_tags) + reference_note
         
         # Set default negative prompt if not provided
         if not negative_prompt:
@@ -149,9 +171,11 @@ class ImageGenerator:
         # Add base prompt
         prompt_parts.append(base_prompt)
         
-        # Add character context
+        # Add strong character consistency instructions
         if character_context:
-            prompt_parts.append(character_context)
+            prompt_parts.append(f"MAINTAINING EXACT SAME CHARACTER APPEARANCE: {character_context}")
+            prompt_parts.append("same facial features, same face shape, same eye shape and color, same nose, same mouth")
+            prompt_parts.append("character model sheet, consistent character design, on-model")
         
         # Add comic book style by default
         prompt_parts.append("comic book style, graphic novel art")

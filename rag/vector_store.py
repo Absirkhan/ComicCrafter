@@ -1,8 +1,9 @@
 """Vector store implementation using ChromaDB."""
 
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Union
 import chromadb
 from chromadb.config import Settings
+from chromadb.utils import embedding_functions
 from pathlib import Path
 
 from utils import get_config, get_logger
@@ -37,11 +38,31 @@ class VectorStore:
             settings=Settings(anonymized_telemetry=False)
         )
         
-        # Get or create collection
-        self.collection = self.client.get_or_create_collection(
-            name=self.collection_name,
-            metadata={"description": "Comic character embeddings"}
-        )
+        # Use sentence-transformers with a lightweight model
+        # This will use all-MiniLM-L6-v2 which is small and efficient
+        try:
+            self.embedding_function = embedding_functions.SentenceTransformerEmbeddingFunction(
+                model_name="all-MiniLM-L6-v2"
+            )
+            logger.info("Using SentenceTransformer embedding function")
+        except Exception as e:
+            logger.warning(f"Failed to load SentenceTransformer: {e}. Using default embedding.")
+            self.embedding_function = embedding_functions.DefaultEmbeddingFunction()
+        
+        # Try to get existing collection first
+        try:
+            self.collection = self.client.get_collection(
+                name=self.collection_name
+            )
+            logger.info(f"Found existing collection: {self.collection_name}")
+        except Exception:
+            # Collection doesn't exist, create it
+            self.collection = self.client.create_collection(
+                name=self.collection_name,
+                embedding_function=self.embedding_function,
+                metadata={"description": "Comic character embeddings"}
+            )
+            logger.info(f"Created new collection: {self.collection_name}")
         
         logger.info(
             f"Initialized VectorStore: collection='{self.collection_name}', "
@@ -81,7 +102,7 @@ class VectorStore:
     
     def query(
         self,
-        query_texts: List[str],
+        query_texts: Union[str, List[str]],
         n_results: int = 5,
         where: Optional[Dict[str, Any]] = None,
         where_document: Optional[Dict[str, Any]] = None
@@ -89,7 +110,7 @@ class VectorStore:
         """Query the vector store for similar documents.
         
         Args:
-            query_texts: List of query texts
+            query_texts: Single query text or list of query texts
             n_results: Number of results to return per query
             where: Metadata filter criteria
             where_document: Document content filter criteria
@@ -97,6 +118,10 @@ class VectorStore:
         Returns:
             Dictionary containing query results
         """
+        # Ensure query_texts is a list
+        if isinstance(query_texts, str):
+            query_texts = [query_texts]
+        
         results = self.collection.query(
             query_texts=query_texts,
             n_results=n_results,
@@ -107,7 +132,7 @@ class VectorStore:
         logger.debug(f"Query returned {len(results.get('ids', [[]])[0])} results")
         return results
     
-    def get_by_id(self, ids: List[str]) -> Dict[str, Any]:
+    def get_by_ids(self, ids: List[str]) -> Dict[str, Any]:
         """Retrieve documents by their IDs.
         
         Args:
@@ -167,6 +192,7 @@ class VectorStore:
         self.client.delete_collection(name=self.collection_name)
         self.collection = self.client.create_collection(
             name=self.collection_name,
+            embedding_function=self.embedding_function,
             metadata={"description": "Comic character embeddings"}
         )
         logger.warning(f"Reset collection: {self.collection_name}")
