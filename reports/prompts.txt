@@ -1,0 +1,245 @@
+COMICCRAFTER PROJECT - AI ASSISTANCE PROMPTS
+===============================================
+This file documents all prompts used to get help from AI tools (ChatGPT, Claude, etc.) during the development of the ComicCrafter project.
+
+Prompts are listed in chronological order of project development.
+
+===============================================
+PHASE 1: PROJECT PLANNING AND RESEARCH
+===============================================
+
+PROMPT 1 (Initial Research):
+I want to build a comic generation system using free AI APIs. Can you suggest the best architecture that combines LLMs for story understanding and diffusion models for image generation? I need to maintain character consistency across panels.
+
+PROMPT 2 (Literature Review):
+Find me recent research papers (2024-2025) on the following topics: multi-agent LLM systems, story visualization, character consistency in diffusion models, and RAG systems. Provide summaries of the key contributions.
+
+PROMPT 3 (Framework Selection):
+What's the difference between LangChain and LangGraph? Which one should I use for a multi-agent comic generation system that needs stateful workflows and error handling?
+
+PROMPT 4 (API Research):
+List all free-tier LLM APIs (Groq, Google AI Studio, HuggingFace) and image generation APIs available in 2024-2025. Include rate limits, model options, and quality comparisons.
+
+PROMPT 5 (RAG System Design):
+Explain how to implement a RAG system for maintaining character consistency. I want to store character descriptions and retrieve them when generating new panels. What vector database should I use?
+
+===============================================
+PHASE 2: INITIAL IMPLEMENTATION
+===============================================
+
+PROMPT 6 (Project Structure):
+Create a Python project structure for a comic generation system with these components: agents (story, prompt, layout), RAG module, image generation, layout engine, and utils. Use proper package organization.
+
+PROMPT 7 (Environment Setup):
+Write a requirements.txt file for a project that uses LangChain, LangGraph, ChromaDB, sentence-transformers, Pillow, FastAPI, and Groq API. Include all dependencies.
+
+PROMPT 8 (Configuration Management):
+Create a Pydantic configuration class that loads from .env file. Include fields for API keys (Groq, Google, HuggingFace, Replicate), model names, ChromaDB paths, output directories, and image dimensions.
+
+PROMPT 9 (Story Agent Implementation):
+Write a StoryAgent class that uses Groq's Llama 3.3 API to decompose a story into structured scenes. Each scene should have: description, characters, dialogue, action, and setting. Return as Pydantic models.
+
+PROMPT 10 (Error Handling):
+How do I handle API rate limits and transient failures when calling free-tier APIs? I need retry logic with exponential backoff.
+
+===============================================
+PHASE 3: LANGGRAPH WORKFLOW DEVELOPMENT
+===============================================
+
+PROMPT 11 (LangGraph State Schema):
+Create a TypedDict state schema for a comic generation workflow that tracks: input (story_text, style), intermediate results (scenes, characters, prompts, images, layouts), metadata (current_step, retry_count, errors), and output (success, output_path).
+
+PROMPT 12 (LangGraph Node Implementation):
+Write a LangGraph node function called decompose_story_node that takes ComicState and a StoryAgent, decomposes the story, updates the state with scenes, and handles errors gracefully. Include proper type hints.
+
+PROMPT 13 (Conditional Routing):
+In LangGraph, how do I implement conditional routing after image generation? If less than 50% of images failed, retry; if all failed, go to error handler; otherwise continue to layout.
+
+PROMPT 14 (Retry Logic):
+Implement a retry_failed_images_node for LangGraph that takes failed image indices from state, simplifies the prompts (remove complex style modifiers), regenerates images, and updates the state. Limit to 2 retry attempts.
+
+PROMPT 15 (Workflow Graph):
+Write the complete _build_graph method for a LangGraph workflow with these nodes: decompose_story, extract_characters, generate_prompts, generate_images, retry_failed_images, plan_layout, assemble_comic, handle_error. Include conditional edges.
+
+PROMPT 16 (Debugging LangGraph):
+My LangGraph workflow is stuck after generate_images node. How do I debug stateful workflows? What logging should I add?
+
+===============================================
+PHASE 4: RAG SYSTEM IMPLEMENTATION
+===============================================
+
+PROMPT 17 (ChromaDB Setup):
+Write a CharacterMemory class that initializes ChromaDB in persistent mode, creates a collection for characters, and provides methods to add_character, retrieve_character, and clear_memory.
+
+PROMPT 18 (Character Embedding):
+How do I use sentence-transformers to embed character descriptions? I need to combine character name, appearance, and role into a single embedding for ChromaDB storage.
+
+PROMPT 19 (Character Extraction):
+Create a method that uses an LLM to extract character information from a list of Scene objects. For each character, extract: name, appearance (physical description), personality, and role. Return as Character dataclass objects.
+
+PROMPT 20 (RAG Retrieval):
+Implement a retrieve_character method that queries ChromaDB by character name, returns the most similar character description, and formats it for injection into image generation prompts.
+
+PROMPT 21 (RAG Performance):
+My ChromaDB queries are slow. How do I optimize vector search performance? Should I use different embedding models or collection settings?
+
+===============================================
+PHASE 5: IMAGE GENERATION BACKENDS
+===============================================
+
+PROMPT 22 (HuggingFace API Client):
+Write a HuggingFaceClient class that uses the HuggingFace Inference API to generate images with Stable Diffusion XL. Include error handling for rate limits and API failures. Return PIL Image objects.
+
+PROMPT 23 (GGML Integration):
+How do I integrate stable-diffusion.cpp (GGML) for local image generation? I need to call the sd.exe binary from Python, pass prompts via command line, and load the generated image.
+
+PROMPT 24 (Replicate API):
+Create a ReplicateClient class for the Replicate API using the FLUX.1-dev model. Handle authentication, prompt submission, polling for completion, and image download.
+
+PROMPT 25 (Fallback Mechanism):
+Implement a multi-provider image generation system that tries HuggingFace first, falls back to Replicate if rate limited, and uses GGML as last resort. Track which provider was used for each image.
+
+PROMPT 26 (Image Caching):
+I want to cache background images to reduce API calls. Implement a hash-based caching system that reuses previously generated images when the prompt (minus character descriptions) matches.
+
+PROMPT 27 (GGML Latency Issue):
+I tried using GGML for image-to-image refinement to improve character consistency, but it takes 30-45 seconds per iteration on CPU. Is there a way to speed this up without GPU? If not, what's the best alternative?
+
+===============================================
+PHASE 6: PROMPT OPTIMIZATION
+===============================================
+
+PROMPT 28 (Prompt Engineering):
+What are the best practices for writing diffusion model prompts for comic-style images? Include guidance on style descriptors, negative prompts, and character consistency cues.
+
+PROMPT 29 (PromptAgent Implementation):
+Create a PromptAgent class that takes scenes and character memory, retrieves character descriptions from RAG, constructs optimized image prompts with style descriptors, and generates negative prompts. Return ImagePrompt objects.
+
+PROMPT 30 (Negative Prompts):
+Generate a comprehensive negative prompt for comic generation that avoids: distorted faces, extra limbs, blurry images, inconsistent clothing, bad anatomy, and low quality artifacts.
+
+PROMPT 31 (Dialogue in Images):
+I want to generate speech bubbles directly in images by including dialogue in prompts (e.g., "character saying 'Hello'"). However, the model can't spell correctly and bubbles look bad. What's the best approach for adding dialogue to comics?
+
+PROMPT 32 (Prompt Simplification):
+When image generation fails, I retry with simplified prompts. Write a function that takes a complex prompt and simplifies it by removing: detailed style modifiers, lighting descriptions, and composition details, keeping only core content.
+
+===============================================
+PHASE 7: LAYOUT AND ASSEMBLY
+===============================================
+
+PROMPT 33 (Layout Types):
+Design a layout system for comic pages that supports: SINGLE (full page), VERTICAL_2, HORIZONTAL_2, GRID_2X2, GRID_2X3, and custom layouts. Create an enum and layout calculation functions.
+
+PROMPT 34 (Panel Composition):
+Write a LayoutManager class that takes panel images and a layout type, calculates panel positions on a page canvas (A4 size), resizes images to fit, and composites them using Pillow.
+
+PROMPT 35 (Text Overlay):
+Implement a TextOverlay class that adds speech bubbles to comic panels. Given text, position, and panel dimensions, draw a white bubble with black border, render text inside, and composite onto the panel image.
+
+PROMPT 36 (Speech Bubble Positioning):
+How do I algorithmically position speech bubbles on comic panels to avoid covering character faces? Should I use object detection or simpler heuristics?
+
+PROMPT 37 (Multi-Page Assembly):
+Extend the layout system to handle multiple pages. Given N scenes and max_panels_per_page, determine optimal page breaks, assign scenes to pages, and generate separate page images.
+
+===============================================
+PHASE 8: FASTAPI WEB INTERFACE
+===============================================
+
+PROMPT 38 (FastAPI Setup):
+Create a FastAPI application with endpoints for comic generation: POST /api/generate (start job), GET /api/status/{job_id} (check status), GET /api/output/{filename} (download result). Use BackgroundTasks for async generation.
+
+PROMPT 39 (Job Management):
+Implement an in-memory job tracking system using a dictionary. Each job should store: job_id, status (pending/processing/completed/failed), created_at, completed_at, output_files, and error message.
+
+PROMPT 40 (HTML Interface):
+Write an HTML/JavaScript interface for the comic generation API. Include: story input textarea, style customization, max_scenes slider, generate button, real-time status polling, and image preview display.
+
+PROMPT 41 (CORS Configuration):
+My FastAPI app isn't accessible from the browser due to CORS errors. Add proper CORS middleware to allow all origins for development.
+
+===============================================
+PHASE 9: EVALUATION AND METRICS
+===============================================
+
+PROMPT 42 (DINO Similarity):
+Explain how to compute DINO similarity for character consistency evaluation. I need to extract DINO features from generated images and compute cosine similarity between panels featuring the same character.
+
+PROMPT 43 (CLIP-T Score):
+Write code to calculate CLIP-T scores for text-image alignment. Given scene descriptions and generated panel images, compute CLIP embeddings and measure cosine similarity.
+
+PROMPT 44 (FID Score Calculation):
+How do I compute FID (Fréchet Inception Distance) between generated comic images and a reference dataset? What pretrained model should I use and how many images do I need?
+
+PROMPT 45 (Evaluation Pipeline):
+Create an evaluation script that takes a set of generated comics and computes: DINO similarity (per-character), LPIPS distance, CLIP-T scores, aesthetic scores, and FID. Output results as a pandas DataFrame.
+
+PROMPT 46 (Ablation Study):
+Design an ablation study to measure the contribution of: RAG system, LangGraph orchestration, retry logic, and style descriptors. What metrics should I compare and how do I run the experiments?
+
+===============================================
+PHASE 10: DEBUGGING AND OPTIMIZATION
+===============================================
+
+PROMPT 47 (Memory Leak):
+My comic generation process is consuming increasing memory over multiple runs. How do I profile Python memory usage and fix potential leaks in PIL Image handling and ChromaDB operations?
+
+PROMPT 48 (API Timeout):
+HuggingFace API sometimes times out after 60 seconds. How do I increase timeout, implement exponential backoff, and handle partial failures gracefully?
+
+PROMPT 49 (Image Quality):
+Generated images from free-tier models look low quality compared to examples in research papers. What prompt engineering tricks can improve aesthetic quality without using premium APIs?
+
+PROMPT 50 (Logging System):
+Implement a proper logging system using loguru that logs: INFO for major steps, DEBUG for detailed operations, ERROR for failures, and writes logs to both console and file with rotation.
+
+===============================================
+PHASE 11: DOCUMENTATION AND PAPER WRITING
+===============================================
+
+PROMPT 51 (README Generation):
+Write a comprehensive README.md for ComicCrafter covering: features, installation, usage (basic and advanced), API documentation, configuration, known issues, and contributing guidelines.
+
+PROMPT 52 (Research Paper Structure):
+I need to write a research paper in Springer LNCS format for this project. Provide an outline with sections: Abstract, Introduction, Related Work, Methodology, Experiments, Discussion, Conclusion. What should each section contain?
+
+PROMPT 53 (Related Work Survey):
+Summarize these 12 papers for my related work section: [lists paper titles on multi-agent systems, RAG, story visualization, character consistency]. For each, provide: main contribution, methodology, and relevance to comic generation.
+
+PROMPT 54 (Experimental Results Tables):
+Create LaTeX tables for my research paper showing: (1) Main results comparing ComicCrafter vs baselines on DINO, LPIPS, CLIP-T, FID scores; (2) Ablation study results; (3) LLM provider comparison; (4) Image backend comparison.
+
+PROMPT 55 (Limitations Discussion):
+Help me write the limitations section for my paper. Key issues: GGML image-to-image refinement has 30-45s latency (too slow), dialogue bubble generation produces spelling errors and poor positioning, character consistency is lower than fine-tuned methods, free-tier rate limits constrain batch generation.
+
+PROMPT 56 (Future Work):
+Generate a list of 5-6 future research directions for comic generation: reference image conditioning, multi-page narrative planning, interactive editing, multilingual support, fine-grained style control, GPU-accelerated GGML.
+
+===============================================
+PHASE 12: DEPLOYMENT AND FINAL TOUCHES
+===============================================
+
+PROMPT 57 (Docker Containerization):
+Create a Dockerfile for ComicCrafter that: uses Python 3.10, installs all requirements, copies code, exposes port 8000, sets environment variables, and runs the FastAPI server with uvicorn.
+
+PROMPT 58 (GitHub Actions):
+Write a GitHub Actions workflow that: runs on push, sets up Python, installs dependencies, runs unit tests (if any), and builds the Docker image.
+
+PROMPT 59 (Error Messages):
+Improve user-facing error messages. Instead of showing raw exceptions, provide helpful messages like "HuggingFace API rate limit reached. Try again in 1 hour or switch to GGML backend."
+
+PROMPT 60 (Performance Benchmarking):
+Create a benchmark script that measures: average time per scene decomposition, image generation latency per backend, ChromaDB query time, and end-to-end comic generation time for stories of different lengths (50, 150, 300 words).
+
+===============================================
+END OF PROMPTS FILE
+===============================================
+
+Total prompts used: 60
+Categories: Planning (5), Implementation (35), Debugging (8), Evaluation (5), Documentation (7)
+
+Note: These prompts represent actual AI assistance used throughout the project.
+Not all code was AI-generated; many components were hand-written and refined.
+AI was primarily used for: boilerplate code, API integration, debugging help,
+documentation, and research paper writing assistance.
