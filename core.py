@@ -1,4 +1,4 @@
-"""Core ComicCrafter orchestrator."""
+"""Core ComicCrafter orchestrator with LangChain integration."""
 
 from typing import Optional, List, Dict, Any
 from pathlib import Path
@@ -7,8 +7,10 @@ from PIL import Image
 from agents.story_agent import StoryAgent, Scene
 from agents.prompt_agent import PromptAgent, ImagePrompt
 from agents.layout_agent import LayoutAgent, PageLayout
+from agents.tool_orchestrator import ComicToolOrchestrator
+from agents.graph_orchestrator import ComicGraphOrchestrator
 from generation.image_generator import ImageGenerator
-from generation.api_clients import GroqClient, GeminiClient, HuggingFaceClient
+from generation.langchain_clients import LangChainLLMClient, HuggingFaceClient
 from layout.panel_layout import LayoutManager
 from layout.text_overlay import TextOverlay, TextBox, TextType
 from rag.character_memory import CharacterMemory
@@ -24,7 +26,9 @@ class ComicCrafter:
         self,
         llm_provider: str = "groq",
         image_provider: str = "huggingface",
-        output_dir: Optional[Path] = None
+        output_dir: Optional[Path] = None,
+        use_langchain: bool = False,
+        use_langgraph: bool = True
     ):
         """Initialize ComicCrafter.
         
@@ -32,36 +36,76 @@ class ComicCrafter:
             llm_provider: LLM provider ("groq" or "gemini")
             image_provider: Image generation provider ("huggingface")
             output_dir: Directory for output files
+            use_langchain: Whether to use LangChain tools for agent orchestration
+            use_langgraph: Whether to use LangGraph stateful workflow (recommended)
         """
         self.config = get_config()
         self.output_dir = output_dir or self.config.output_dir
         self.output_dir.mkdir(parents=True, exist_ok=True)
+        self.use_langchain = use_langchain
+        self.use_langgraph = use_langgraph
         
-        # Initialize LLM client
+        # Initialize LangChain LLM client
         if llm_provider.lower() == "groq":
-            self.llm_client = GroqClient()
-        elif llm_provider.lower() == "gemini":
-            self.llm_client = GeminiClient()
+            self.llm_client = LangChainLLMClient()
         else:
-            raise ValueError(f"Unknown LLM provider: {llm_provider}")
+            raise ValueError(f"Unknown LLM provider: {llm_provider} (only 'groq' supported with LangChain)")
         
-        # Initialize image client
+        # Initialize image client(s)
         if image_provider.lower() == "huggingface":
             self.image_client = HuggingFaceClient()
+            logger.info("Using HuggingFace for all image generation")
+        elif image_provider.lower() == "replicate":
+            from generation.langchain_clients import ReplicateClient
+            self.image_client = ReplicateClient()
+            logger.info("Using Replicate with SDXL + ControlNet for character consistency")
+        elif image_provider.lower() == "hybrid":
+            # Hybrid mode: HuggingFace for new characters, Replicate for consistency
+            from generation.langchain_clients import ReplicateClient
+            try:
+                self.image_client = ReplicateClient()
+                logger.info("Using HYBRID mode: Replicate (with ControlNet) for character consistency")
+            except ValueError:
+                # Replicate token not available, fall back to HuggingFace
+                self.image_client = HuggingFaceClient()
+                logger.warning("Replicate token not found, using HuggingFace only")
         else:
-            raise ValueError(f"Unknown image provider: {image_provider}")
+            raise ValueError(f"Unknown image provider: {image_provider} (supported: 'huggingface', 'replicate', 'hybrid')")
         
         # Initialize components
         self.character_memory = CharacterMemory()
-        self.story_agent = StoryAgent(self.llm_client, self.character_memory)
-        self.prompt_agent = PromptAgent(self.llm_client, self.character_memory)
-        self.layout_agent = LayoutAgent()
+        
+        if use_langgraph:
+            # Use LangGraph stateful workflow (recommended)
+            self.graph_orchestrator = ComicGraphOrchestrator(
+                self.llm_client,
+                self.image_client,
+                self.character_memory,
+                self.output_dir
+            )
+            logger.info("Using LangGraph stateful workflow")
+        elif use_langchain:
+            # Use LangChain tool-based orchestration
+            self.tool_orchestrator = ComicToolOrchestrator(
+                self.llm_client,
+                self.character_memory
+            )
+            logger.info("Using LangChain tool-based orchestration")
+        else:
+            # Use direct agent coordination
+            self.story_agent = StoryAgent(self.llm_client, self.character_memory)
+            self.prompt_agent = PromptAgent(self.llm_client, self.character_memory)
+            self.layout_agent = LayoutAgent()
+            logger.info("Using direct agent coordination")
+        
         self.image_generator = ImageGenerator(self.image_client)
         self.layout_manager = LayoutManager()
         self.text_overlay = TextOverlay()
         
+        mode = "LangGraph" if use_langgraph else ("LangChain" if use_langchain else "Direct")
         logger.info(
-            f"Initialized ComicCrafter: LLM={llm_provider}, Image={image_provider}"
+            f"Initialized ComicCrafter: LLM={llm_provider}, Image={image_provider}, "
+            f"Mode={mode}"
         )
     
     def generate_comic(
@@ -86,34 +130,69 @@ class ComicCrafter:
         """
         logger.info("Starting comic generation")
         
-        # Step 1: Decompose story into scenes
-        logger.info("Step 1: Decomposing story into scenes")
-        scenes = self.story_agent.decompose_story(
-            story_text,
-            max_scenes=max_scenes or self.config.max_panels_per_page
-        )
-        
-        if not scenes:
-            logger.error("No scenes generated from story")
-            return []
-        
-        # Step 2: Extract and store characters
-        logger.info("Step 2: Extracting characters")
-        characters = self.story_agent.extract_characters(scenes)
-        logger.info(f"Extracted {len(characters)} characters")
-        
-        # Step 3: Generate image prompts
-        logger.info("Step 3: Generating image prompts")
-        prompts = self.prompt_agent.generate_prompts(scenes, style=style)
-        
-        # Step 4: Plan layouts
-        logger.info("Step 4: Planning page layouts")
-        page_layouts = self.layout_agent.plan_adaptive_layout(scenes)
+        if self.use_langgraph:
+            # Use LangGraph stateful workflow
+            logger.info("Using LangGraph stateful workflow")
+            final_state = self.graph_orchestrator.generate_comic(
+                story_text=story_text,
+                style=style,
+                max_scenes=max_scenes or self.config.max_panels_per_page
+            )
+            
+            if not final_state["success"]:
+                logger.error(f"LangGraph workflow failed: {final_state['errors']}")
+                return []
+            
+            scenes = final_state["scenes"]
+            characters = final_state["characters"]
+            prompts = final_state["prompts"]
+            page_layouts = final_state["layouts"]
+            images = final_state["images"]
+            
+        elif self.use_langchain:
+            # Use LangChain tool-based orchestration
+            logger.info("Using LangChain tool-based orchestration")
+            result = self.tool_orchestrator.coordinate_comic_generation(
+                story_text=story_text,
+                style=style,
+                max_scenes=max_scenes or self.config.max_panels_per_page
+            )
+            scenes = result["scenes"]
+            characters = result["characters"]
+            prompts = result["prompts"]
+            page_layouts = result["layouts"]
+            images = None  # Will generate below
+        else:
+            # Use direct coordination
+            # Step 1: Decompose story into scenes
+            logger.info("Step 1: Decomposing story into scenes")
+            scenes = self.story_agent.decompose_story(
+                story_text,
+                max_scenes=max_scenes or self.config.max_panels_per_page
+            )
+            
+            if not scenes:
+                logger.error("No scenes generated from story")
+                return []
+            
+            # Step 2: Extract and store characters
+            logger.info("Step 2: Extracting characters")
+            characters = self.story_agent.extract_characters(scenes)
+            logger.info(f"Extracted {len(characters)} characters")
+            
+            # Step 3: Generate image prompts
+            logger.info("Step 3: Generating image prompts")
+            prompts = self.prompt_agent.generate_prompts(scenes, style=style)
+            
+            # Step 4: Plan layouts
+            logger.info("Step 4: Planning page layouts")
+            page_layouts = self.layout_agent.plan_adaptive_layout(scenes)
+            images = None  # Will generate below
         
         # Step 5: Generate images and compose pages
         logger.info("Step 5: Generating images and composing pages")
         output_paths = self._generate_pages(
-            scenes, prompts, page_layouts, add_dialogue, output_name
+            scenes, prompts, page_layouts, add_dialogue, output_name, images
         )
         
         logger.info(f"Comic generation complete. Created {len(output_paths)} pages")
@@ -125,7 +204,8 @@ class ComicCrafter:
         prompts: List[ImagePrompt],
         page_layouts: List[PageLayout],
         add_dialogue: bool,
-        output_name: str
+        output_name: str,
+        pregenerated_images: Optional[List[bytes]] = None
     ) -> List[Path]:
         """Generate and compose comic pages.
         
@@ -148,20 +228,42 @@ class ComicCrafter:
             page_prompts = [prompts[i] for i in page_layout.scene_indices]
             page_scenes = [scenes[i] for i in page_layout.scene_indices]
             
-            # Generate panel images
+            # Generate panel images or use pregenerated ones
             panel_images = []
-            for prompt in page_prompts:
-                panel = self.image_generator.generate_panel(
-                    prompt=prompt.prompt,
-                    character_context=prompt.character_context,
-                    negative_prompt=prompt.negative_prompt
-                )
-                panel_images.append(panel)
+            if pregenerated_images:
+                # Use images from LangGraph workflow
+                for i in page_layout.scene_indices:
+                    if pregenerated_images[i]:
+                        # Convert bytes to PIL Image
+                        from io import BytesIO
+                        panel = Image.open(BytesIO(pregenerated_images[i]))
+                        panel_images.append(panel)
+                    else:
+                        # Generate placeholder
+                        panel = Image.new('RGB', (512, 512), color='lightgray')
+                        panel_images.append(panel)
+            else:
+                # Generate images normally
+                for prompt in page_prompts:
+                    panel = self.image_generator.generate_panel(
+                        prompt=prompt.prompt,
+                        character_context=prompt.character_context,
+                        negative_prompt=prompt.negative_prompt
+                    )
+                    panel_images.append(panel)
             
-            # Add dialogue overlays if requested
+            # Add dialogue overlays if requested (only if not already in images)
+            # Note: dialogue_in_image flag should be passed from generate_comic if using in-image dialogue
+            dialogue_in_image = False  # Default: add as overlay
             if add_dialogue:
+                logger.info(f"Adding dialogue to {len(page_scenes)} panels")
+                for idx, scene in enumerate(page_scenes):
+                    if scene.dialogue:
+                        logger.info(f"  Panel {idx+1} dialogue: {scene.dialogue}")
+                    else:
+                        logger.info(f"  Panel {idx+1} has no dialogue")
                 panel_images = self._add_dialogue_to_panels(
-                    panel_images, page_scenes
+                    panel_images, page_scenes, dialogue_in_image
                 )
             
             # Create layout and compose page
@@ -187,46 +289,65 @@ class ComicCrafter:
     def _add_dialogue_to_panels(
         self,
         panels: List[Image.Image],
-        scenes: List[Scene]
+        scenes: List[Scene],
+        dialogue_in_image: bool = False
     ) -> List[Image.Image]:
         """Add dialogue overlays to panels.
         
         Args:
             panels: List of panel images
             scenes: List of Scene objects
+            dialogue_in_image: If True, skip overlay (dialogue already in generated image)
             
         Returns:
             List of panels with dialogue overlays
         """
+        # If dialogue is already in the image, return panels unchanged
+        if dialogue_in_image:
+            logger.info("Skipping dialogue overlay (dialogue already in generated images)")
+            return panels
+        
         result_panels = []
         
-        for panel, scene in zip(panels, scenes):
+        for idx, (panel, scene) in enumerate(zip(panels, scenes)):
+            logger.debug(f"Panel {idx+1}: {scene.description[:50]}... | Dialogue: {scene.dialogue}")
             if scene.dialogue:
                 # Create text boxes for dialogue
                 text_boxes = []
                 panel_width = panel.width
                 panel_height = panel.height
                 
-                # Position text boxes
+                # Position text boxes - use top area to avoid cutoff
                 num_lines = len(scene.dialogue)
+                
+                # Calculate better positioning based on panel size
+                margin_x = int(panel_width * 0.1)  # 10% margin from edges
+                margin_y = int(panel_height * 0.1)
+                
                 for i, line in enumerate(scene.dialogue):
-                    # Alternate positions for multiple dialogue lines
+                    # Position dialogue at top of panel to avoid cutoff
                     if num_lines == 1:
+                        # Single line - top center
                         x = panel_width // 2
-                        y = panel_height - 60
+                        y = margin_y + 40
                     elif i % 2 == 0:
-                        x = panel_width // 3
-                        y = panel_height - 60 - (i // 2) * 80
+                        # Even index - top left area
+                        x = margin_x + 120
+                        y = margin_y + 40 + (i // 2) * 90
                     else:
-                        x = 2 * panel_width // 3
-                        y = panel_height - 60 - (i // 2) * 80
+                        # Odd index - top right area
+                        x = panel_width - margin_x - 120
+                        y = margin_y + 40 + (i // 2) * 90
+                    
+                    # Ensure text box fits within panel
+                    max_width = min(240, panel_width - 2 * margin_x)
                     
                     text_box = TextBox(
                         text=line,
                         x=x,
                         y=y,
                         text_type=TextType.SPEECH_BUBBLE,
-                        max_width=min(200, panel_width - 40)
+                        max_width=max_width
                     )
                     text_boxes.append(text_box)
                 

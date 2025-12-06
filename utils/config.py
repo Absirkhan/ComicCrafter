@@ -32,6 +32,7 @@ class Config(BaseModel):
     groq_api_key: str = Field(default_factory=lambda: os.getenv("GROQ_API_KEY", ""))
     google_api_key: str = Field(default_factory=lambda: os.getenv("GOOGLE_API_KEY", ""))
     huggingface_token: str = Field(default_factory=lambda: os.getenv("HUGGINGFACE_TOKEN", ""))
+    replicate_token: str = Field(default_factory=lambda: os.getenv("REPLICATE_API_TOKEN", ""))
     
     # Model Configuration
     default_llm_model: str = Field(
@@ -43,6 +44,17 @@ class Config(BaseModel):
     gemini_model: str = Field(
         default_factory=lambda: os.getenv("GEMINI_MODEL", "gemini-2.0-flash-exp")
     )
+    
+    # Image Generation Backend
+    image_backend: str = Field(
+        default_factory=lambda: os.getenv("IMAGE_BACKEND", "ggml")  # ggml, huggingface, or replicate
+    )
+    
+    # GGML Stable Diffusion Configuration (Local)
+    sd_cpp_executable: str = Field(default_factory=lambda: os.getenv("SD_CPP_EXECUTABLE", ""))
+    sd_model_path: str = Field(default_factory=lambda: os.getenv("SD_MODEL_PATH", ""))
+    sd_vae_path: str = Field(default_factory=lambda: os.getenv("SD_VAE_PATH", ""))
+    sd_threads: int = Field(default_factory=lambda: int(os.getenv("SD_THREADS", "0")))
     
     # ChromaDB Configuration
     chromadb_path: Path = Field(

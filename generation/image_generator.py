@@ -1,12 +1,11 @@
 """Image generation orchestrator for comic panels."""
 
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, Union
 from pathlib import Path
 from io import BytesIO
 from PIL import Image
 import numpy as np
 
-from generation.api_clients import HuggingFaceClient
 from utils import get_config, get_logger
 
 logger = get_logger(__name__)
@@ -17,24 +16,63 @@ class ImageGenerator:
     
     def __init__(
         self,
-        image_client: Optional[HuggingFaceClient] = None,
+        image_client: Optional[Any] = None,
         width: Optional[int] = None,
-        height: Optional[int] = None
+        height: Optional[int] = None,
+        backend: Optional[str] = None
     ):
         """Initialize ImageGenerator.
         
         Args:
-            image_client: HuggingFace client for image generation
+            image_client: Image generation client (GGML, HuggingFace, or Replicate)
             width: Image width in pixels
             height: Image height in pixels
+            backend: Backend to use ('ggml', 'huggingface', or 'replicate')
         """
         config = get_config()
-        self.client = image_client or HuggingFaceClient()
         self.width = width or config.image_width
         self.height = height or config.image_height
+        
+        # Determine backend
+        self.backend = backend or config.image_backend
+        
+        # Initialize client based on backend
+        if image_client:
+            self.client = image_client
+            logger.info(f"Using provided image client")
+        else:
+            self.client = self._initialize_client()
+        
         # Store reference images for character consistency
         self.character_references: Dict[str, Image.Image] = {}
-        logger.info(f"Initialized ImageGenerator ({self.width}x{self.height})")
+        logger.info(f"Initialized ImageGenerator with {self.backend} backend ({self.width}x{self.height})")
+    
+    def _initialize_client(self) -> Any:
+        """Initialize the appropriate image generation client based on backend."""
+        if self.backend == "ggml":
+            try:
+                from generation.ggml_client import GGMLStableDiffusionClient
+                logger.info("Initializing GGML (local) backend")
+                return GGMLStableDiffusionClient()
+            except Exception as e:
+                logger.warning(f"Failed to initialize GGML backend: {e}")
+                logger.info("Falling back to HuggingFace backend")
+                self.backend = "huggingface"
+        
+        if self.backend == "replicate":
+            try:
+                from generation.langchain_clients import ReplicateClient
+                logger.info("Initializing Replicate backend")
+                return ReplicateClient()
+            except Exception as e:
+                logger.warning(f"Failed to initialize Replicate backend: {e}")
+                logger.info("Falling back to HuggingFace backend")
+                self.backend = "huggingface"
+        
+        # Default to HuggingFace
+        from generation.api_clients import HuggingFaceClient
+        logger.info("Initializing HuggingFace backend")
+        return HuggingFaceClient()
     
     def set_character_reference(self, character_name: str, image: Image.Image) -> None:
         """Store a reference image for a character.
@@ -68,28 +106,45 @@ class ImageGenerator:
         Returns:
             Generated PIL Image
         """
-        # Check if we have reference images for any characters
-        reference_note = ""
+        # Use RAG character memory for consistency (text-based)
+        consistency_notes = []
+        
+        logger.info(f"  Character references available: {list(self.character_references.keys())}")
+        logger.info(f"  Characters in this panel: {characters}")
+        
         if characters:
             for char_name in characters:
                 if char_name in self.character_references:
-                    reference_note = f" [IMPORTANT: Maintain exact same facial features and appearance as {char_name}'s established look - same face shape, eyes, nose, mouth, skin tone]"
-                    break
+                    # We have seen this character before - add detailed visual description
+                    # from RAG to maintain consistency through text prompts
+                    consistency_notes.append(
+                        f"Character '{char_name}' - MAINTAIN EXACT SAME APPEARANCE: "
+                        f"same face shape, eye color and shape, nose shape, mouth shape, "
+                        f"skin tone, hair style and color, hair length, facial structure, "
+                        f"body build, costume design, costume colors, all clothing details, "
+                        f"accessories - MUST be visually identical to previous panels. "
+                        f"NO changes to character design."
+                    )
+                    logger.info(f"  ✓ Using RAG memory for {char_name} consistency")
         
-        # Build enhanced prompt with reference information
-        enhanced_prompt = self._build_prompt(prompt, character_context, style_tags) + reference_note
+        # Build enhanced prompt with character consistency instructions
+        consistency_prompt = ". ".join(consistency_notes) if consistency_notes else ""
+        if consistency_prompt:
+            enhanced_prompt = consistency_prompt + ". " + self._build_prompt(prompt, character_context, style_tags)
+        else:
+            enhanced_prompt = self._build_prompt(prompt, character_context, style_tags)
         
         # Set default negative prompt if not provided
         if not negative_prompt:
             negative_prompt = (
                 "blurry, low quality, distorted, deformed, ugly, bad anatomy, "
-                "watermark, signature, text"
+                "watermark, signature, text, inconsistent character features"
             )
         
-        logger.info(f"Generating panel with prompt: {enhanced_prompt[:100]}...")
+        logger.info(f"Generating panel with prompt: {enhanced_prompt[:150]}...")
         
         try:
-            # Generate image
+            # Generate image using text-to-image with enhanced prompts for consistency
             image_bytes = self.client.generate_image(
                 prompt=enhanced_prompt,
                 negative_prompt=negative_prompt,
