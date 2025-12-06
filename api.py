@@ -42,17 +42,13 @@ class ComicRequest(BaseModel):
     story_text: str = Field(..., description="Story text to convert to comic")
     style: str = Field("comic book style", description="Visual style for the comic")
     max_scenes: Optional[int] = Field(None, description="Maximum number of scenes")
-    add_dialogue: bool = Field(True, description="Whether to add dialogue overlays")
-    llm_provider: str = Field("groq", description="LLM provider (groq or gemini)")
-    output_name: Optional[str] = Field(None, description="Base name for output files")
+    add_dialogue: bool = Field(True, description="Whether to add dialogue directly in the generated images")
 
 
 class SceneRequest(BaseModel):
     """Request model for scene-based generation."""
     scenes: List[dict] = Field(..., description="List of scene dictionaries")
     style: str = Field("comic book style", description="Visual style")
-    add_dialogue: bool = Field(True, description="Add dialogue overlays")
-    llm_provider: str = Field("groq", description="LLM provider")
 
 
 class JobStatus(BaseModel):
@@ -64,6 +60,7 @@ class JobStatus(BaseModel):
     completed_at: Optional[str] = None
     output_files: Optional[List[str]] = None
     error: Optional[str] = None
+    workflow_summary: Optional[dict] = None  # Added for workflow endpoint
 
 
 class HealthResponse(BaseModel):
@@ -98,24 +95,21 @@ def generate_comic_task(
     story_text: str,
     style: str,
     max_scenes: Optional[int],
-    add_dialogue: bool,
-    llm_provider: str,
-    output_name: Optional[str]
+    add_dialogue: bool = True
 ):
     """Background task for comic generation."""
     try:
         update_job(job_id, status="processing", message="Initializing ComicCrafter...")
         
-        # Initialize ComicCrafter
-        crafter = ComicCrafter(llm_provider=llm_provider)
+        # Initialize ComicCrafter (uses Groq by default)
+        crafter = ComicCrafter(llm_provider="groq")
         
         # Generate output name
-        if not output_name:
-            output_name = f"comic_{job_id[:8]}"
+        output_name = f"comic_{job_id[:8]}"
         
         update_job(job_id, message="Generating comic...")
         
-        # Generate comic
+        # Generate comic with dialogue in-image mode
         output_paths = crafter.generate_comic(
             story_text=story_text,
             style=style,
@@ -310,19 +304,6 @@ async def root():
                     <input type="number" id="maxScenes" name="max_scenes" min="1" max="12" value="6">
                 </div>
                 
-                <div class="form-group">
-                    <label for="llmProvider">🤖 AI Provider</label>
-                    <select id="llmProvider" name="llm_provider">
-                        <option value="groq">Groq (Llama 3.3)</option>
-                        <option value="gemini">Google Gemini</option>
-                    </select>
-                </div>
-                
-                <div class="form-group checkbox-group">
-                    <input type="checkbox" id="addDialogue" name="add_dialogue" checked>
-                    <label for="addDialogue" style="margin-bottom: 0;">💬 Add Dialogue Bubbles</label>
-                </div>
-                
                 <button type="submit" id="generateBtn">Generate Comic</button>
             </form>
             
@@ -332,7 +313,7 @@ async def root():
             </div>
             
             <div class="footer">
-                <p>Powered by Groq, Google Gemini, and HuggingFace</p>
+                <p>Powered by Groq (Llama 3.3) and HuggingFace</p>
                 <p>🆓 Zero-cost AI comic generation</p>
             </div>
         </div>
@@ -348,22 +329,20 @@ async def root():
                     story_text: document.getElementById('story').value,
                     style: document.getElementById('style').value,
                     max_scenes: parseInt(document.getElementById('maxScenes').value),
-                    llm_provider: document.getElementById('llmProvider').value,
-                    add_dialogue: document.getElementById('addDialogue').checked
+                    add_dialogue: document.getElementById('addDialogue').checked,
+                    dialogue_mode: document.getElementById('dialogueMode').value
                 };
                 
                 try {
                     document.getElementById('generateBtn').disabled = true;
-                    document.getElementById('generateBtn').innerHTML = '<span class="loading"></span> Generating...';
-                    
-                    const response = await fetch('/api/generate', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify(formData)
-                    });
-                    
-                    const data = await response.json();
-                    
+            document.getElementById('comicForm').addEventListener('submit', async (e) => {
+                e.preventDefault();
+                
+                const formData = {
+                    story_text: document.getElementById('story').value,
+                    style: document.getElementById('style').value,
+                    max_scenes: parseInt(document.getElementById('maxScenes').value)
+                };  
                     if (response.ok) {
                         currentJobId = data.job_id;
                         showStatus('pending', '⏳ Job created. Starting generation...');
@@ -460,13 +439,11 @@ async def generate_comic(
     background_tasks: BackgroundTasks
 ):
     """Generate a comic from story text."""
-    # Validate API keys
+    # Validate API keys (use Groq by default)
     config = get_config()
     
-    if request.llm_provider == "groq" and not config.groq_api_key:
+    if not config.groq_api_key:
         raise HTTPException(status_code=400, detail="Groq API key not configured")
-    elif request.llm_provider == "gemini" and not config.google_api_key:
-        raise HTTPException(status_code=400, detail="Google API key not configured")
     
     if not config.huggingface_token:
         raise HTTPException(status_code=400, detail="HuggingFace token not configured")
@@ -482,9 +459,7 @@ async def generate_comic(
         story_text=request.story_text,
         style=request.style,
         max_scenes=request.max_scenes,
-        add_dialogue=request.add_dialogue,
-        llm_provider=request.llm_provider,
-        output_name=request.output_name
+        add_dialogue=request.add_dialogue
     )
     
     return {"job_id": job_id, "message": "Comic generation started"}
@@ -546,29 +521,26 @@ async def generate_from_scenes(
     """Generate comic from pre-defined scenes."""
     config = get_config()
     
-    if request.llm_provider == "groq" and not config.groq_api_key:
+    if not config.groq_api_key:
         raise HTTPException(status_code=400, detail="Groq API key not configured")
-    elif request.llm_provider == "gemini" and not config.google_api_key:
-        raise HTTPException(status_code=400, detail="Google API key not configured")
     
     # Create job
     job_id = str(uuid.uuid4())
     create_job(job_id, "Scene-based comic generation started")
     
     # Convert scene dicts to Scene objects
-    def generate_from_scenes_task(job_id: str, scenes_data: List[dict], style: str, 
-                                   add_dialogue: bool, llm_provider: str):
+    def generate_from_scenes_task(job_id: str, scenes_data: List[dict], style: str):
         try:
             update_job(job_id, status="processing", message="Processing scenes...")
             
-            crafter = ComicCrafter(llm_provider=llm_provider)
+            crafter = ComicCrafter(llm_provider="groq")
             
             scenes = [Scene(**scene_data) for scene_data in scenes_data]
             
             output_paths = crafter.generate_from_scenes(
                 scenes=scenes,
                 style=style,
-                add_dialogue=add_dialogue,
+                add_dialogue=True,
                 output_name=f"comic_{job_id[:8]}"
             )
             
@@ -594,12 +566,183 @@ async def generate_from_scenes(
         generate_from_scenes_task,
         job_id=job_id,
         scenes_data=request.scenes,
-        style=request.style,
-        add_dialogue=request.add_dialogue,
-        llm_provider=request.llm_provider
+        style=request.style
     )
     
     return {"job_id": job_id, "message": "Scene-based generation started"}
+
+
+@app.post("/api/workflow")
+async def execute_workflow(
+    request: ComicRequest,
+    background_tasks: BackgroundTasks
+):
+    """Execute the complete LangGraph workflow with full visibility.
+    
+    Workflow Steps:
+    1. decompose_story - Break story into scenes
+    2. extract_characters - Extract character descriptions
+    3. generate_prompts - Create image generation prompts
+    4. generate_images - Generate panel images
+    5. retry_failed_images - Retry any failed image generations
+    6. plan_layout - Arrange panels into page layouts
+    7. assemble_comic - Composite final pages with dialogue
+    8. handle_error - Handle any errors gracefully
+    
+    Returns real-time job status with detailed step information.
+    """
+    config = get_config()
+    
+    # Validate API keys (use Groq as default LLM provider)
+    if not config.groq_api_key:
+        raise HTTPException(status_code=400, detail="Groq API key not configured")
+    
+    if not config.huggingface_token:
+        raise HTTPException(status_code=400, detail="HuggingFace token not configured")
+    
+    # Create job
+    job_id = str(uuid.uuid4())
+    create_job(job_id, "LangGraph workflow initialized")
+    
+    # Background task for workflow execution
+    def execute_workflow_task(
+        job_id: str,
+        story_text: str,
+        style: str,
+        max_scenes: Optional[int]
+    ):
+        try:
+            # Initialize ComicCrafter with LangGraph workflow (uses Groq by default)
+            update_job(job_id, status="processing", message="🔧 Initializing LangGraph workflow...")
+            crafter = ComicCrafter(
+                llm_provider="groq",
+                use_langgraph=True,
+                use_langchain=False
+            )
+            
+            # Generate output name
+            output_name = f"workflow_{job_id[:8]}"
+            
+            # Execute workflow with step tracking
+            update_job(job_id, status="processing", message="📖 Step 1/7: Decomposing story into scenes...")
+            
+            # Call the graph orchestrator with in-image dialogue mode
+            final_state = crafter.graph_orchestrator.generate_comic(
+                story_text=story_text,
+                style=style,
+                max_scenes=max_scenes,
+                add_dialogue=True
+            )
+            
+            # Check for errors
+            if not final_state.get("success", False):
+                errors = final_state.get("errors", ["Unknown error"])
+                error_msg = "; ".join(errors)
+                update_job(
+                    job_id,
+                    status="failed",
+                    message="❌ Workflow failed",
+                    completed_at=datetime.now().isoformat(),
+                    error=error_msg
+                )
+                logger.error(f"Workflow job {job_id} failed: {error_msg}")
+                return
+            
+            # Extract results
+            scenes = final_state.get("scenes", [])
+            characters = final_state.get("characters", [])
+            prompts = final_state.get("prompts", [])
+            images = final_state.get("images", [])
+            layouts = final_state.get("layouts", [])
+            
+            # Generate final pages with dialogue already in images
+            update_job(job_id, status="processing", message="🎨 Assembling final pages (dialogue in images)...")
+            
+            output_paths = crafter._generate_pages(
+                scenes=scenes,
+                prompts=prompts,
+                page_layouts=layouts,
+                add_dialogue=False,  # No overlay needed - dialogue already in images
+                output_name=output_name,
+                pregenerated_images=images
+            )
+            
+            # Clean up the workflow's assembly output if it exists (without dialogue)
+            workflow_output_dir = Path("examples/output").absolute()
+            for old_page in workflow_output_dir.glob("comic_page_*.png"):
+                try:
+                    old_page.unlink()
+                    logger.info(f"Cleaned up intermediate file: {old_page}")
+                except Exception as e:
+                    logger.warning(f"Could not delete intermediate file {old_page}: {e}")
+            
+            # Convert paths to strings
+            output_files = [str(path) for path in output_paths]
+            
+            # Create workflow summary
+            workflow_summary = {
+                "total_scenes": len(scenes),
+                "total_characters": len(characters),
+                "total_prompts": len(prompts),
+                "total_images": len(images),
+                "failed_images": len(final_state.get("failed_images", [])),
+                "retry_count": final_state.get("retry_count", 0),
+                "workflow_steps": [
+                    "decompose_story ✅",
+                    "extract_characters ✅",
+                    "generate_prompts ✅",
+                    "generate_images ✅",
+                    f"retry_failed_images {'✅' if final_state.get('retry_count', 0) > 0 else '⏭️'}",
+                    "plan_layout ✅",
+                    "assemble_comic ✅"
+                ]
+            }
+            
+            update_job(
+                job_id,
+                status="completed",
+                message=f"✅ Workflow completed successfully! Generated {len(output_files)} pages with {len(scenes)} scenes",
+                completed_at=datetime.now().isoformat(),
+                output_files=output_files,
+                workflow_summary=workflow_summary
+            )
+            
+            logger.info(f"Workflow job {job_id} completed: {workflow_summary}")
+            
+        except Exception as e:
+            error_msg = str(e)
+            update_job(
+                job_id,
+                status="failed",
+                message="❌ Workflow execution failed",
+                completed_at=datetime.now().isoformat(),
+                error=error_msg
+            )
+            logger.error(f"Workflow job {job_id} failed: {error_msg}", exc_info=True)
+    
+    # Add background task
+    background_tasks.add_task(
+        execute_workflow_task,
+        job_id=job_id,
+        story_text=request.story_text,
+        style=request.style,
+        max_scenes=request.max_scenes
+    )
+    
+    return {
+        "job_id": job_id,
+        "message": "LangGraph workflow started",
+        "workflow_steps": [
+            "1. decompose_story - Breaking story into scenes",
+            "2. extract_characters - Extracting character info",
+            "3. generate_prompts - Creating image prompts",
+            "4. generate_images - Generating panel images",
+            "5. retry_failed_images - Retrying failures (if needed)",
+            "6. plan_layout - Planning page layouts",
+            "7. assemble_comic - Compositing final pages",
+            "8. handle_error - Error handling (if needed)"
+        ]
+    }
 
 
 if __name__ == "__main__":

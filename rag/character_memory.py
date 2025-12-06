@@ -3,6 +3,9 @@
 from typing import List, Dict, Any, Optional
 from dataclasses import dataclass, asdict
 import json
+import base64
+from io import BytesIO
+from PIL import Image
 
 from rag.vector_store import VectorStore
 from utils import get_logger
@@ -164,6 +167,14 @@ class CharacterMemory:
         characters = []
         if results["ids"] and results["ids"][0]:
             for metadata in results["metadatas"][0]:
+                # Skip non-character documents (e.g., stored images)
+                if metadata.get("type") == "character_image":
+                    continue
+                
+                # Skip if essential character fields are missing
+                if "name" not in metadata or "appearance" not in metadata:
+                    continue
+                
                 # Convert tags back to list from string
                 tags = metadata.get("tags", "")
                 if isinstance(tags, str):
@@ -184,13 +195,15 @@ class CharacterMemory:
     def get_character_context(
         self,
         character_name: str,
-        scene_description: Optional[str] = None
+        scene_description: Optional[str] = None,
+        check_previous_images: bool = True
     ) -> str:
         """Get character context for image generation prompts.
         
         Args:
             character_name: Name of the character
             scene_description: Optional scene description for context
+            check_previous_images: Whether to check for previous image references
             
         Returns:
             Character context string for prompts
@@ -201,11 +214,26 @@ class CharacterMemory:
             logger.warning(f"Character not found: {character_name}")
             return ""
         
+        # Check if we have previous images of this character for enhanced consistency
+        has_references = False
+        if check_previous_images:
+            ref_images = self.get_character_reference_images(character_name, n_results=1)
+            has_references = len(ref_images) > 0
+        
         # Build context focused on visual consistency with more detail
-        context_parts = [
-            f"SAME {character_name} from previous panels",
-            f"consistent appearance: {character.appearance}"
-        ]
+        if has_references:
+            # Emphasize EXACT replication when we have references
+            context_parts = [
+                f"IDENTICAL {character_name} from previous panels - EXACT SAME person",
+                f"MUST match established appearance PRECISELY: {character.appearance}",
+                "maintain PERFECT continuity of facial features, coloring, proportions"
+            ]
+        else:
+            # First appearance - establish the look
+            context_parts = [
+                f"{character_name} - establishing consistent appearance",
+                f"detailed features: {character.appearance}"
+            ]
         
         if character.role:
             context_parts.append(f"role: {character.role}")
@@ -290,3 +318,90 @@ class CharacterMemory:
         """Clear all character data from memory."""
         self.vector_store.reset()
         logger.warning("Cleared all character memory")
+    
+    def add_character_image(
+        self,
+        character_name: str,
+        image: Image.Image,
+        scene_description: str = "",
+        panel_number: int = 0
+    ) -> str:
+        """Store a generated image for character visual consistency.
+        
+        Args:
+            character_name: Name of the character in the image
+            image: Generated PIL Image
+            scene_description: Description of the scene
+            panel_number: Panel number for tracking
+            
+        Returns:
+            Image ID in vector store
+        """
+        # Convert image to base64 for storage
+        buffered = BytesIO()
+        image.save(buffered, format="PNG")
+        image_base64 = base64.b64encode(buffered.getvalue()).decode()
+        
+        # Create document from image metadata and scene
+        character = self.get_character(character_name)
+        doc_text = f"Visual reference for {character_name} in panel {panel_number}: {scene_description}"
+        if character:
+            doc_text += f". Appearance: {character.appearance}"
+        
+        image_id = f"img_{character_name.lower().replace(' ', '_')}_panel_{panel_number}"
+        
+        metadata = {
+            "character_name": character_name,
+            "panel_number": panel_number,
+            "scene_description": scene_description,
+            "image_data": image_base64,
+            "type": "character_image"
+        }
+        
+        self.vector_store.add_documents(
+            documents=[doc_text],
+            metadatas=[metadata],
+            ids=[image_id]
+        )
+        
+        logger.info(f"Stored image reference for {character_name} (panel {panel_number})")
+        return image_id
+    
+    def get_character_reference_images(
+        self,
+        character_name: str,
+        n_results: int = 3
+    ) -> List[Dict[str, Any]]:
+        """Retrieve previously generated images of a character.
+        
+        Args:
+            character_name: Character to search for
+            n_results: Number of reference images to retrieve
+            
+        Returns:
+            List of dicts with 'image' (PIL.Image) and 'metadata'
+        """
+        query = f"Visual reference for {character_name}"
+        results = self.vector_store.query(
+            query_texts=[query],
+            n_results=n_results
+        )
+        
+        references = []
+        if results["metadatas"] and results["metadatas"][0]:
+            for metadata in results["metadatas"][0]:
+                if metadata.get("type") == "character_image" and metadata.get("character_name") == character_name:
+                    try:
+                        # Decode base64 image
+                        image_data = base64.b64decode(metadata["image_data"])
+                        image = Image.open(BytesIO(image_data))
+                        references.append({
+                            "image": image,
+                            "panel_number": metadata.get("panel_number", 0),
+                            "scene_description": metadata.get("scene_description", "")
+                        })
+                    except Exception as e:
+                        logger.error(f"Failed to decode image for {character_name}: {e}")
+        
+        logger.debug(f"Retrieved {len(references)} reference images for {character_name}")
+        return references

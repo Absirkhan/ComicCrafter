@@ -176,34 +176,66 @@ class HuggingFaceClient:
         negative_prompt: Optional[str] = None,
         num_inference_steps: int = 30,
         guidance_scale: float = 7.5,
+        reference_image: Optional[bytes] = None,
+        strength: float = 0.75,
         **kwargs
     ) -> bytes:
         """Generate image using HuggingFace Inference API.
+        
+        Supports both text-to-image and image-to-image generation.
         
         Args:
             prompt: Image generation prompt
             negative_prompt: Negative prompt for guidance
             num_inference_steps: Number of denoising steps
             guidance_scale: Guidance scale for generation
+            reference_image: Reference image bytes for img2img (optional)
+            strength: Denoising strength for img2img (0.0-1.0)
             **kwargs: Additional parameters
             
         Returns:
             Image data as bytes
         """
         try:
-            # Use the InferenceClient's text_to_image method
-            # Keep it simple like the working example - only pass essential parameters
-            if negative_prompt:
-                image = self.client.text_to_image(
-                    prompt,
-                    model=self.model,
-                    negative_prompt=negative_prompt
-                )
+            # Image-to-image mode
+            if reference_image:
+                from PIL import Image
+                logger.info("Using HuggingFace image-to-image for character consistency")
+                
+                # Convert bytes to PIL Image
+                ref_img = Image.open(BytesIO(reference_image))
+                
+                # Use image_to_image method
+                if negative_prompt:
+                    image = self.client.image_to_image(
+                        prompt=prompt,
+                        image=ref_img,
+                        model=self.model,
+                        negative_prompt=negative_prompt,
+                        strength=strength
+                    )
+                else:
+                    image = self.client.image_to_image(
+                        prompt=prompt,
+                        image=ref_img,
+                        model=self.model,
+                        strength=strength
+                    )
+            
+            # Text-to-image mode
             else:
-                image = self.client.text_to_image(
-                    prompt,
-                    model=self.model
-                )
+                logger.info("Using HuggingFace text-to-image")
+                if negative_prompt:
+                    image = self.client.text_to_image(
+                        prompt,
+                        model=self.model,
+                        negative_prompt=negative_prompt
+                    )
+                else:
+                    image = self.client.text_to_image(
+                        prompt,
+                        model=self.model
+                    )
             
             # Convert PIL Image to bytes
             buffer = BytesIO()

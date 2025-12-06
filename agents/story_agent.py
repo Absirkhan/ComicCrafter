@@ -91,24 +91,40 @@ class StoryAgent:
         """
         prompt = f"""You are a comic book writer. Decompose the following story into {max_scenes} or fewer comic book scenes.
 
+CRITICAL: Use the EXACT SAME character names consistently across all scenes. If a character appears multiple times, use the identical name each time.
+
 For each scene, provide:
 1. A brief description of what happens
-2. Characters present in the scene
-3. Dialogue lines (if any)
+2. Characters present in the scene (use EXACT SAME names as in story)
+3. Dialogue lines (if any) - only include dialogue spoken in THIS specific scene
 4. Main action
-5. Setting/location
+5. Setting/location with important VISUAL DETAILS (props, weather, time of day, distinctive features)
 
 Story:
 {story_text}
 
 Format your response as a JSON array of scenes. Each scene should have this structure:
 {{
-    "description": "Brief scene description",
-    "characters": ["character1", "character2"],
+    "description": "Brief scene description WITH KEY VISUAL ELEMENTS",
+    "characters": ["CharacterName1", "CharacterName2"],
     "dialogue": ["line1", "line2"],
-    "action": "Main action description",
-    "setting": "Location description"
+    "action": "Main action description with important visual details",
+    "setting": "Location description INCLUDING time of day, lighting, props, and distinctive features"
 }}
+
+CRITICAL VISUAL DETAILS TO PRESERVE:
+- Character clothing/accessories mentioned in story (colors, distinctive items)
+- Props (weapons, objects, scrolls, masks, etc.)
+- Environmental features (moon, sun, weather, time of day)
+- Villain appearance details (armor colors, distinctive features)
+- Key dramatic moments (reveals, emotional beats)
+
+IMPORTANT:
+- Use character names from the story (e.g., if story says "Sentinel", use "Sentinel" not "superhero")
+- Keep character names consistent across all scenes
+- Only include dialogue that is actually spoken in that specific scene
+- Empty dialogue array [] if no one speaks in that scene
+- PRESERVE visual details like clothing colors, props, and environmental features
 
 Respond with only the JSON array, no additional text."""
         

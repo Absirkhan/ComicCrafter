@@ -225,16 +225,52 @@ class LayoutManager:
             # Get content area
             cx, cy, cw, ch = panel_layout.get_content_area()
             
-            # Resize panel to fit content area
-            panel_resized = panel_img.resize((cw, ch), Image.Resampling.LANCZOS)
+            # Resize panel to fit content area while maintaining aspect ratio
+            panel_resized = self._resize_panel_fit(panel_img, cw, ch)
+            
+            # Center the panel in the content area
+            paste_x = cx + (cw - panel_resized.width) // 2
+            paste_y = cy + (ch - panel_resized.height) // 2
             
             # Paste panel
-            page.paste(panel_resized, (cx, cy))
+            page.paste(panel_resized, (paste_x, paste_y))
             
             logger.debug(f"Placed panel {i+1} at ({cx}, {cy})")
         
         logger.info(f"Composed page with {len(panels)} panels")
         return page
+    
+    def _resize_panel_fit(
+        self,
+        image: Image.Image,
+        target_width: int,
+        target_height: int
+    ) -> Image.Image:
+        """Resize image to fit within target dimensions while maintaining aspect ratio.
+        
+        Args:
+            image: Image to resize
+            target_width: Maximum width
+            target_height: Maximum height
+            
+        Returns:
+            Resized image
+        """
+        # Calculate aspect ratios
+        img_aspect = image.width / image.height
+        target_aspect = target_width / target_height
+        
+        # Determine new dimensions based on aspect ratio
+        if img_aspect > target_aspect:
+            # Image is wider - fit to width
+            new_width = target_width
+            new_height = int(target_width / img_aspect)
+        else:
+            # Image is taller - fit to height
+            new_height = target_height
+            new_width = int(target_height * img_aspect)
+        
+        return image.resize((new_width, new_height), Image.Resampling.LANCZOS)
     
     def auto_layout(self, num_panels: int) -> LayoutType:
         """Automatically select the best layout for a number of panels.

@@ -10,19 +10,29 @@ ComicCrafter transforms your stories into visual comics using free AI APIs. No e
 - 🎯 **Character Consistency**: RAG-based character memory using ChromaDB for visual consistency across panels
 - 🎨 **Multiple AI Providers**: 
   - **Text Generation**: Groq (Llama 3.3), Google Gemini 2.5
-  - **Image Generation**: HuggingFace Inference API (FLUX.1-dev)
+  - **Image Generation**: 
+    - **GGML (Local)**: Unlimited, rate-limit-free generation with stable-diffusion.cpp ⭐ NEW!
+    - **HuggingFace**: Cloud API with free tier
+    - **Replicate**: Cloud API with advanced features
 - 📐 **Smart Layouts**: Automatic panel layout with multiple preset options
 - 💬 **Dialogue Support**: Automatic speech bubble and caption overlays
-- 🆓 **Zero Cost**: Uses only free API tiers
+- 🚀 **No Rate Limits**: Use local GGML backend for unlimited image generation
+- 🆓 **Zero Cost**: Uses only free API tiers (or run completely locally)
 
 ## 🚀 Quick Start
 
 ### Prerequisites
 
 - Python 3.8 or higher
-- API keys (all free):
-  - [Groq API Key](https://console.groq.com/keys) OR [Google API Key](https://makersuite.google.com/app/apikey)
-  - [HuggingFace Token](https://huggingface.co/settings/tokens)
+- **For text generation**, one of:
+  - [Groq API Key](https://console.groq.com/keys) (Recommended, free)
+  - [Google API Key](https://makersuite.google.com/app/apikey) (Free)
+- **For image generation**, choose one:
+  - **GGML (Local)**: [stable-diffusion.cpp](https://github.com/leejet/stable-diffusion.cpp) + GGML model ⭐ No rate limits!
+  - **HuggingFace**: [Token](https://huggingface.co/settings/tokens) (Free, rate limited)
+  - **Replicate**: [Token](https://replicate.com/account/api-tokens) (Paid, but better features)
+
+> 💡 **Recommended**: Use GGML for unlimited local generation! See [GGML_SETUP.md](GGML_SETUP.md)
 
 ### Installation
 
@@ -48,11 +58,32 @@ ComicCrafter transforms your stories into visual comics using free AI APIs. No e
    ```
    
    Edit `.env` and add your API keys:
-   ```
+   ```env
+   # Text generation (choose one)
    GROQ_API_KEY=your_groq_api_key_here
    GOOGLE_API_KEY=your_google_api_key_here
+   
+   # Image generation backend
+   IMAGE_BACKEND=ggml  # or huggingface, replicate
+   
+   # Cloud options (if not using GGML)
    HUGGINGFACE_TOKEN=your_huggingface_token_here
+   REPLICATE_API_TOKEN=your_replicate_token_here
+   
+   # GGML (local, no rate limits!)
+   SD_CPP_EXECUTABLE=/path/to/sd.exe
+   SD_MODEL_PATH=/path/to/model.gguf
    ```
+
+5. **Setup GGML (Optional but Recommended)**
+   
+   For unlimited, rate-limit-free image generation:
+   ```bash
+   # See detailed instructions in GGML_SETUP.md
+   python examples/test_ggml.py
+   ```
+   
+   📖 **[Complete GGML Setup Guide](GGML_SETUP.md)**
 
 ### Basic Usage
 
