@@ -31,82 +31,81 @@ Islamabad, Pakistan\\
 \maketitle
 
 \begin{abstract}
-The automatic generation of comics from textual narratives presents a complex multimodal challenge requiring both semantic understanding and visual consistency. While recent advances in Large Language Models (LLMs) and diffusion-based image generators have shown remarkable individual capabilities, their orchestrated integration for coherent comic generation under resource constraints remains largely unexplored. We present \textbf{ComicCrafter}, a novel zero-cost multi-agent AI system that transforms textual narratives into visually consistent comic panels through intelligent orchestration of freely available AI technologies. Our system employs a LangGraph-based multi-agent architecture coordinating specialized agents for story decomposition, prompt optimization, and layout planning, coupled with a Retrieval-Augmented Generation (RAG) system using ChromaDB for maintaining character consistency across panels. We integrate multiple free-tier LLM providers (Groq's Llama 3.3, Google's Gemini) and image generation backends (GGML, HuggingFace, Replicate) to ensure accessibility without compromising quality. Experimental evaluation demonstrates that ComicCrafter achieves competitive character consistency (DINO similarity: 0.72 $\pm$ 0.08) and narrative coherence (CLIP-T score: 0.68 $\pm$ 0.05) while operating entirely within free-tier constraints. Our comparative analysis reveals that LangGraph-based orchestration outperforms traditional sequential approaches by 23\% in character consistency and 18\% in generation reliability. This work demonstrates that sophisticated multimodal generation systems can be democratized through careful system design and intelligent resource orchestration, making advanced AI-powered creative tools accessible to independent creators, students, and researchers. Code and documentation are available at \url{https://github.com/Absirkhan/ComicCrafter}.
+The process of creating comics based on text automatically is a difficult problem since it is necessary to be accurate in the story and maintain the visuals. LLMs and diffusion image generators are great individually, but it is not yet that old how to make them combined into a complete comic without exceeding constrained resources.
+We created ComicCrafter, a free, multi-agent, AI platform that transforms your text into a sequence of comic strips, which appear to be unified, with just free software.
+It operates on a LangGraph workflow to orchestrate multiple agents, one which divided the story, another which edited prompts, and also which planned the layout. And a RAG module that has ChromaDB to keep the characters looking like they should between panels.
+We also tie into free LLMs such as Groq Llama 3.3 and Google Gemini, free image backends such as GGML, HuggingFace and Replicate, meaning that we can remain on the free side without compromising quality.
+We experimented on ComicCrafter and found that it is consistent in its characters - DINO similarity 0.72 $\pm$ 0.08 - and in the story flow, CLIP-T score 0.68 $\pm$ 0.05, even with the use of free-tier accounts.
+We discovered that LangGraph approach is 23-percent better than a straightline pipeline in terms of character consistency and 18-percent in terms of reliability. It demonstrates that advanced multimodal systems could be provided by intelligent design and resource juggling providing students and independent creators with a very powerful, free creative tool.
 
 \keywords{Comic Generation \and Multi-Agent Systems \and Retrieval-Augmented Generation \and LangGraph \and Character Consistency \and Story Visualization}
 \end{abstract}
 
 \section{Introduction}
 
-The intersection of generative AI and creative storytelling has opened unprecedented opportunities for automated content creation. Comic book generation represents a particularly challenging multimodal task that requires not only understanding narrative structure and character dynamics but also maintaining visual consistency across multiple panels while adhering to artistic composition principles~\cite{zhou2024storydiffusion}. Unlike single-image generation tasks, comic creation demands long-range consistency in character appearance, coherent scene transitions, and proper integration of textual elements (dialogue, captions, sound effects) with visual content~\cite{he2024dreamstory}.
+The convergence of the generative AI and creative storytelling has presented previously unavailable possibilities of automated content creation. Creation of comic books is among the most challenging multimodal processes as it must know the plotline and character development and have the visual elements aligned to each other within the panels and obey the rules of artistic composition~\cite{zhou2024storydiffusion}. In contrast to creating a single image, creating a comic means that the appearance of the characters that take part in the comic must be consistently the same over the long term, that the scenes have to transition smoothly, and a mix of text (dialogue, captions, sound effects) and artwork must be properly mixed~\cite{he2024dreamstory}.
 
-Recent advances in Large Language Models (LLMs)~\cite{guo2024llm, tran2025multiagent} and diffusion-based image generators~\cite{avrahami2024chosen, wang2025characterfactory} have demonstrated remarkable capabilities in their respective domains. However, their orchestrated integration for coherent comic generation remains underexplored, particularly under strict resource constraints that preclude access to expensive computational resources or proprietary APIs. Existing approaches to story visualization~\cite{zhou2024storydiffusion, he2024dreamstory} typically rely on GPU-intensive fine-tuning or specialized hardware, limiting accessibility for independent creators, students, and researchers in resource-constrained environments.
+The recent developments in the fields of Large Language Models (LLMs)~\cite{guo2024llm, tran2025multiagent} and diffusion-based image generators~\cite{avrahami2024chosen, wang2025characterfactory} promise a lot. Nevertheless, producing a coherent comic out of them is a relatively untapped area, particularly when you are only left with free compute or open APIs to play with. The current approaches to visualising stories typically require GPUs, fine-tuning or special hardware, which may be difficult to afford by researchers, students, and hobbyists with limited budgets.
 
-This paper introduces \textbf{ComicCrafter}, a novel zero-cost multi-agent AI system that addresses the research question: \textit{"How can multi-agent LLM systems orchestrate free-tier diffusion model APIs to generate visually coherent comics with character consistency under strict budget constraints?"} Our system makes several key contributions:
+The current paper presents ComicCrafter, a free open-source multi-agent AI solution to the following question: How can we create coherent comics using a tight budget using free-tier diffusion model APIs and LLMs?
 
-\textbf{(1) LangGraph-Based Multi-Agent Orchestration:} We employ LangGraph's stateful workflow framework to coordinate three specialized agents—Story Structuring Agent, Prompt Optimization Agent, and Layout Composition Agent—each optimized for specific sub-tasks. This modular architecture enables robust error handling, automatic retry mechanisms, and conditional routing based on generation success, significantly improving reliability over sequential approaches.
+\textbf{(3) Hybrid Backend Architecture:} ComicCrafter communicates with a variety of free-tier image backends (local GGML using stable-diffusion.cpp, HuggingFace Inference API, Replicate API) and uses each one automatically. Such a multi-provider design makes this system continuously operate in the event that a single service reaches a rate limit, and also allows the user to select a backend that matches their hardware.
 
-\textbf{(2) RAG-Powered Character Consistency:} We implement a Retrieval-Augmented Generation (RAG) system using ChromaDB as the vector store to maintain character descriptions and visual attributes. By embedding character profiles using sentence-transformers and dynamically retrieving them during prompt generation, we achieve cross-panel visual consistency without requiring expensive fine-tuning or reference image conditioning~\cite{avrahami2024chosen}.
+\textbf{(4) Zero-Cost Optimization Strategies:} We use premature-efficiency tricks, cache characters, and single-shot generation to reduce the number of API calls and maintain quality. These tricks allow the system to continue operating with heavy free-tier quotas.
 
-\textbf{(3) Hybrid Backend Architecture:} ComicCrafter integrates multiple free-tier image generation backends (local GGML via stable-diffusion.cpp, HuggingFace Inference API, and Replicate API) with intelligent fallback mechanisms. This multi-provider strategy ensures system resilience when rate limits are encountered while enabling users to select backends based on their hardware capabilities.
+\textbf{(5) Evaluation Framework:} The character consistency with DINO similarity and LPIPS distance is evaluated, the narrative flow with CLIP-T alignment and the comparison between various LLM providers and image backends is performed. Our findings indicate DINO similarity of 0.72 $\pm$ 0.08 and CLIP-T of 0.68 $\pm$ 0.05 which is comparable to methods that utilize pay-walled resources. Success is enhanced by LangGraph orchestration compared to direct coordination by 23\%. We also like Groq Llama 3.3 70B that strikes the balance between speed (2.3s average response) and quality in decomposing stories, and local GGML that removes rate constraints but introduces latency.
 
-\textbf{(4) Zero-Cost Optimization Strategies:} We introduce prompt efficiency techniques, intelligent caching of character templates, and single-shot generation strategies that minimize API calls while maintaining output quality. These optimizations make our system practical for deployment under strict free-tier quotas.
-
-\textbf{(5) Comprehensive Evaluation Framework:} We conduct extensive quantitative evaluation using character consistency metrics (DINO similarity, LPIPS distance), narrative coherence measures (CLIP-T alignment), and comparative analysis across different LLM providers and image generation backends.
-
-Our experimental results demonstrate that ComicCrafter achieves DINO similarity scores of 0.72 ($\pm$ 0.08) for character consistency and CLIP-T scores of 0.68 ($\pm$ 0.05) for text-image alignment, comparable to approaches using proprietary resources. The LangGraph-based orchestration improves generation success rate by 23\% compared to direct agent coordination. Furthermore, our comparative analysis reveals that Groq's Llama 3.3 70B provides the best balance of speed (2.3s average response time) and output quality for story decomposition tasks, while local GGML backends eliminate rate-limiting constraints entirely at the cost of increased latency.
-
-The remainder of this paper is organized as follows: Section~\ref{sec:related} reviews related work in multi-agent systems, story visualization, and character-consistent generation. Section~\ref{sec:methodology} details our system architecture, including the LangGraph workflow, RAG integration, and image generation pipeline. Section~\ref{sec:experiments} presents experimental setup, evaluation metrics, and comprehensive results. Section~\ref{sec:discussion} discusses findings, limitations, and future directions. Section~\ref{sec:conclusion} concludes the paper.
+The remainder of the paper is structured as follows: Section~\ref{sec:related} reviews relevant literature on the multi-agent systems, story visualization and character-consistent generation. Section~\ref{sec:methodology} describes the system architecture which consists of the LangGraph workflow, RAG integration and image generation pipeline. Section~\ref{sec:experiments} gives the experimental setup, evaluations metrics and results. Section~\ref{sec:discussion} will be a discussion of findings, limitations, and future work. Section~\ref{sec:conclusion} concludes the paper.
 
 \section{Related Work}
 \label{sec:related}
 
 \subsection{Multi-Agent LLM Systems}
 
-The emergence of large language models has catalyzed research in multi-agent collaboration frameworks. Guo et al.~\cite{guo2024llm} provide a comprehensive survey of LLM-based multi-agent systems, identifying key challenges including agent communication protocols, task allocation strategies, and conflict resolution mechanisms. Tran et al.~\cite{tran2025multiagent} specifically examine collaboration mechanisms in multi-agent systems, proposing hierarchical coordination patterns that we adapt for our story-to-comic pipeline. Han et al.~\cite{han2024llm} identify open problems in LLM multi-agent systems, particularly emphasizing the need for stateful workflows with conditional branching—a gap we address through LangGraph integration.
+The emergence of large language models has created an interest in multi-agent collaboration systems. Guo et al.~\cite{guo2024llm} review the domain of LLM-based multi-agent systems, and note such issues as agent communication protocols, task allocation, and conflict management. Tran et al.~\cite{tran2025multiagent} consider the mechanisms of collaboration in multi-agent systems and suggest the hierarchical coordination patterns in which we operate in our story-to-comic pipeline. Han et al.~\cite{han2024llm} state that there are gaps in the use of multi-agent systems based on the LLM, such as the necessity to have stateful workflows with conditional branching and we address this gap by LangGraph.
 
-Our work builds on these foundations by implementing role-based task allocation where agents specialize in complementary functions (story analysis, prompt optimization, layout planning), enhancing both efficiency and output quality compared to monolithic LLM approaches.
+Our work is based on those concepts by delegating roles with agents specialized in complementary activities (story analysis, prompt optimization, layout planning), which is more efficient and has better output quality than monolithic LLM solutions.
 
 \subsection{Story Visualization and Comic Generation}
 
-Story visualization has evolved significantly with the advent of diffusion models. Zhou et al.~\cite{zhou2024storydiffusion} introduce StoryDiffusion, which employs consistent self-attention mechanisms for long-range character consistency. However, their approach requires fine-tuning on specific character datasets and access to GPUs, limiting practical accessibility. He et al.~\cite{he2024dreamstory} present an open-domain story visualization system but rely on proprietary DALL-E models, contradicting zero-cost constraints.
+Diffusion models have much improved story visualization. Zhou et al.~\cite{zhou2024storydiffusion} developed StoryDiffusion that consists of self-attention that remains consistent through extended sequences so that the characters do not change their appearance. Their mechanism requires narrowing down on particular character datasets and GPUs, thus not working with everyone. The models presented by He et al.~\cite{he2024dreamstory} are an open-domain system, though the researchers use proprietary versions of DALL-E, which contradicts the zero-cost rule.
 
-In contrast, ComicCrafter leverages API-based workflows with free-tier providers, achieving comparable consistency through RAG-powered prompt augmentation rather than model fine-tuning. This architectural choice prioritizes accessibility while maintaining competitive performance.
+Conversely, ComicCrafter adheres to workflows of the API complete attempts based on free-tier providers. It achieves this with both consistency by using RAG-powered prompt augmentation rather than fine-tuning, which is more available and yet competitive.
 
 \subsection{Character-Consistent Image Generation}
 
-Maintaining character consistency across multiple images remains a fundamental challenge in story visualization. Avrahami et al.~\cite{avrahami2024chosen} propose "The Chosen One," which uses segmentation-based reference conditioning and attention injection to preserve character identity. Wang et al.~\cite{wang2025characterfactory} introduce CharacterFactory, employing GANs with specialized consistency losses for character sampling.
+Remaining character consistency in series of images is an enormous problem. The first publication is a segmentation-based reference conditioning and attention injection, done by Avrahami et al.~\cite{avrahami2024chosen} to maintain identity called The Chosen One. CharacterFactory proposed by Wang et al.~\cite{wang2025characterfactory} draws on the use of GANs on special consistency losses to sample characters.
 
-While these methods achieve superior consistency, they require either reference images with manual segmentation~\cite{avrahami2024chosen} or extensive training on character datasets~\cite{wang2025characterfactory}. Our RAG-based approach offers a practical alternative: by embedding and retrieving character descriptions from a vector store, we inject consistency cues directly into generation prompts without additional training. This technique, while sacrificing some precision compared to reference-conditioned methods, operates entirely within our zero-cost constraint.
+Neither of these methods is as consistent but requires either reference images and a manual segmentation~\cite{avrahami2024chosen} or peons of training on character datasets~\cite{wang2025characterfactory}. We have a practical alternative in our RAG-based approach: there is no additional training needed, and our approach to inject consistency information into the prompts by querying a vector store and pulling out descriptions of characters. That loses some accuracy to the methods that are reference-conditioned, but puts the whole appearance in a zero-cost budget.
 
 \subsection{Retrieval-Augmented Generation (RAG)}
 
-RAG systems, pioneered by Lewis et al.~\cite{lewis2020retrieval} for knowledge-intensive NLP tasks, combine parametric knowledge (LLM weights) with non-parametric knowledge (external documents). Gao et al.~\cite{gao2024rag} survey modern RAG architectures, emphasizing retrieval strategies and fusion techniques.
+Lewis et al.~\cite{lewis2020retrieval} were the first to apply the knowledge-intensive NLP to RAG systems via external documents and model weights. The modern RAG frameworks have been overviewed by Gao et al.~\cite{gao2024rag}, emphasizing the retrieval and fusion methods.
 
-We extend RAG from factual knowledge retrieval to creative content generation by storing character-specific visual and narrative attributes. This novel application of RAG enables consistency in generative tasks—a departure from traditional question-answering or summarization use cases. Our ChromaDB-based implementation leverages sentence-transformers for embedding character profiles, which are dynamically retrieved during prompt generation to ensure cross-panel coherence.
+We do not merely store character-specific visual and narrative facts but store RAG, to creative generation. This new use case provides consistency in generative work different to the regular question-answering work or summarization. In our ChromaDB our embedded profile creates are character profiles and we use sentence-transformers to embed the profile during prompt research, ensuring that the panels are coherent.
 
 \subsection{Prompt Engineering for Generative Models}
 
-Effective prompt engineering is critical for maximizing the capabilities of LLMs and diffusion models. Sahoo et al.~\cite{sahoo2024survey} present a systematic survey of prompt engineering techniques, categorizing approaches into zero-shot, few-shot, and chain-of-thought strategies. Chen et al.~\cite{chen2024unleashing} demonstrate how prompt structure, style descriptors, and negative prompts significantly impact diffusion model outputs. Vatsal and Dubey~\cite{vatsal2024survey} specifically examine prompt methods for large language models, highlighting the importance of task-specific templates.
+Generation of high-quality images with minimal distortion by employing machine learning techniques to modify input images can be achieved by choosing the optimal style (filter)~\cite{chen2024unleashing}. Prompt engineering is crucial in order to extract the best out of LLMs and diffusion models. The survey related by Sahoo et al.~\cite{sahoo2024survey} categorized the prompt techniques and classified into zero-shot, few-shot and chain-of-thought. Chen et al.~\cite{chen2024unleashing} demonstrated the significant influence positive prompts, descriptors of style, and time on the diffusion output. Vatsal and Dubey~\cite{vatsal2024survey} specifically examined prompts of large language models and emphasized the significance of task-specific templates.
 
-ComicCrafter's Prompt Optimization Agent incorporates these insights by applying comic-specific style descriptors ("comic book panel," "graphic novel art"), character consistency cues retrieved from the RAG system, and carefully crafted negative prompts to avoid common artifacts (distorted faces, inconsistent clothing). This systematic approach to prompt engineering is crucial for achieving high-quality outputs from free-tier image generation APIs, which lack the robustness of premium services.
+The Prompt optimisation Agent of comiccrafter does all this in: it injects comic specific style tags (comic book panel, graphic novel art), extracts cues of consistency using the RAG system, forms negative prompts to prevent common artifacts (distorted faces, inconsistent clothing). These measures are necessary to achieve quality outputs of free-tier image APIs unlikely to compete with the premium services.
 
 \subsection{Zero-Cost and Resource-Constrained AI Systems}
 
-While much generative AI research assumes access to substantial computational resources, practical deployment often faces strict budgetary constraints. Our work aligns with the emerging paradigm of democratizing AI tools by exclusively leveraging free-tier services. We contribute novel optimization strategies—intelligent caching, multi-provider fallback mechanisms, and single-shot generation techniques—that maintain output quality while respecting API quotas. To our knowledge, ComicCrafter is the first documented system to demonstrate feasible, high-quality comic generation under zero-cost constraints through careful orchestration of freely available technologies.
+Many generative AI studies presuppose the use of a big compute, yet practical application can run into a small budget. Our project aligns with the new trend of using the AI tool in various applications employing free-tier only. We use our tricks of optimization, smart caching and fallback on multiple providers and single shot generation to maintain quality with API quotas. To our understanding, ComicCrafter is the first known recorded system that demonstrates that you can create master-quality pages of comics by using technology, which is publicly available, with a careful orchestration of the said technologies.
 
 \section{Methodology}
 \label{sec:methodology}
 
 \subsection{System Architecture Overview}
 
-ComicCrafter employs a modular architecture comprising four primary components: (1) Multi-Agent Orchestration Layer, (2) RAG-Powered Character Consistency Module, (3) Image Generation Backend, and (4) Layout and Assembly Engine. Figure~\ref{fig:architecture} illustrates the complete system pipeline.
+It describes the overall structure of the system in question and highlights the connections among its components. There are four key components of ComicCrafter that include (1) the multi-agent orchestration layer, (2) a RAG-driven character consistency module, (3) an image generation back-end and (4) an engine based on layout and assembly. The full pipeline is presented in Figure~\ref{fig:architecture}.
 
-The workflow operates as follows: User-provided text is first processed by the \textit{Story Structuring Agent}, which decomposes the narrative into structured scenes. The \textit{RAG system} then extracts and stores character information in a vector database. Subsequently, the \textit{Prompt Optimization Agent} generates image prompts augmented with retrieved character descriptions. These prompts are sent to the \textit{Image Generation Backend}, which produces panel images. Finally, the \textit{Layout Composition Agent} arranges panels, adds dialogue overlays, and assembles the complete comic pages.
+It works in the following way: first the text provided by the user enters the \textit{Story Structuring Agent}, which splits the story into sceneries. \textit{RAG system} pulls out and caches character data in a vector database. Then the \textit{Agent of Prompt Optimization} synthesizes image prompts with the details of the retrieved characters in them. These prompts are sent to \textit{Image Generation Backend} which is the one that draws the panels. Lastly, the \textit{Layout Composition Agent} organizes the panels, includes speech bubbles and sews up the final pages of the comic.
 
-\subsection{LangGraph-Based Multi-Agent Orchestration}
+\subsection{LangGraph-Based Multi-agent Organization}
 
-Traditional multi-agent systems often employ sequential or reactive coordination patterns, which lack robust error handling and state management. We adopt \textbf{LangGraph}, a stateful workflow framework built on LangChain, to implement a directed acyclic graph (DAG) of agent operations with conditional routing and automatic retry mechanisms.
+Simplistic sets up in multi-agent systems are deployed with simple sequences or reactive patterns and these lack proper error tolerance and state monitoring. With LangChain, on top of which is LangGraph, we construct a directed acyclic graph (DAG) of agent steps conditionally borne plus automatic retries.
 
 \subsubsection{State Schema}
 
@@ -142,9 +141,9 @@ class ComicState(TypedDict):
 
 This stateful representation enables nodes to access and modify shared context, facilitating seamless information flow across agent boundaries.
 
-\subsubsection{Workflow Graph Construction}
+\subsubsection{Construction of a Workflow Graph}
 
-The LangGraph workflow consists of eight nodes connected via conditional edges:
+LangGraph workflow consists of eight nodes which are interrelated with conditional edges.
 
 \begin{algorithm}
 \caption{ComicCrafter LangGraph Workflow}
@@ -168,18 +167,18 @@ The LangGraph workflow consists of eight nodes connected via conditional edges:
 \end{algorithmic}
 \end{algorithm}
 
-This graph structure provides several advantages over sequential approaches:
+This has a number of advantages over the linear methods:
 \begin{itemize}
-\item \textbf{Automatic Retry Logic:} Failed image generations trigger simplified prompt retries (removing complex style modifiers) before resorting to placeholder images.
-\item \textbf{Partial Success Handling:} If some but not all images fail, the workflow continues, substituting placeholders only where necessary.
-\item \textbf{State Tracking:} Each node updates \texttt{current\_step} and logs errors, enabling detailed debugging and performance analysis.
+\item \textbf{Automatic retry feature:} when an image generating operation fails, the system continues to give more basic prompts and then resorts to place holder images.
+\item \textbf{Partial success processing:} when some of the images fail, the process proceeds, but only placeholders are used in empty panel positions.
+\item \textbf{State tracking:} The current state is updated in each node, which makes state debugging and performance analysis possible.
 \end{itemize}
 
 \subsection{Specialized Agents}
 
 \subsubsection{Story Structuring Agent}
 
-The Story Structuring Agent decomposes raw narrative text into structured \texttt{Scene} objects. Each scene contains:
+Scene objects are the units of raw narrative text that the Story Structuring Agent divides raw narrative text into. Each scene holds:
 \begin{itemize}
 \item \texttt{description}: High-level scene summary
 \item \texttt{characters}: List of characters present
@@ -228,13 +227,13 @@ where $\mathbf{e}_c \in \mathbb{R}^{384}$ represents the character embedding. Th
 
 \subsubsection{Prompt Optimization Agent}
 
-The Prompt Optimization Agent transforms scenes into optimized image generation prompts. For each scene, it:
+Each scene is already prepared to become a trigger in this agent. For every scene it:
 \begin{enumerate}
-\item \textbf{Retrieves Character Context:} Queries ChromaDB with character names to fetch appearance descriptions.
-\item \textbf{Constructs Base Prompt:} Combines scene description, action, and setting.
-\item \textbf{Injects Style Descriptors:} Appends user-specified style (e.g., "comic book style, graphic novel art, professional illustration").
-\item \textbf{Augments with Character Details:} Merges retrieved character appearances directly into the prompt.
-\item \textbf{Adds Negative Prompts:} Includes common artifact suppressors (e.g., "deformed faces, extra limbs, blurry, low quality").
+\item \textbf{Retrieves character context:} by asking ChromaDB with character names so as to retrieve descriptions of appearances.
+\item \textbf{Constructs a prompt of building base:} using the description of the scene, actions and setting.
+\item \textbf{Includes style descriptions:} e.g. such as comic book style, graphic novel art, or professional illustration.
+\item \textbf{Boom clicks the character details:} pulled out directly into the prompt.
+\item \textbf{Mutually exclusive negatives prompts:} in order to prevent such common artifacts as distorted faces, additional limbs, blur, or poor quality.
 \end{enumerate}
 
 The final prompt structure is:
@@ -251,7 +250,7 @@ This RAG-augmented prompting strategy significantly improves character consisten
 
 \subsubsection{Layout Composition Agent}
 
-The Layout Composition Agent determines panel arrangements based on scene count and narrative pacing. It supports multiple layout types:
+TheLayoutCompositionAgentdeterminespanel arrangements based on scene count and narrative pacing. It supports multiple layout types:
 \begin{itemize}
 \item \texttt{SINGLE}: Full-page panel (climactic moments)
 \item \texttt{VERTICAL\_2}: Two vertically stacked panels (sequential actions)
@@ -269,31 +268,31 @@ Layout selection employs rule-based heuristics:
 
 \subsection{Image Generation Backend}
 
-ComicCrafter supports three image generation backends, selectable via the \texttt{IMAGE\_BACKEND} environment variable:
+ComicCrafter uses three image generation backends and they are chosen using the \texttt{IMAGE\_BACKEND} environment variable:
 
 \subsubsection{GGML (Local)}
 
-Utilizes \texttt{stable-diffusion.cpp} for local inference with GGML-quantized models (e.g., Stable Diffusion v1.5 in Q4\_0 format). Advantages include zero API rate limits and complete privacy. However, GGML backends exhibit higher latency (10-15 seconds per image on CPU) and limited support for advanced techniques like ControlNet.
+Local flattening Use local inference with GGML using \texttt{stable-diffusion.cpp} quantized models (e.g. Stable Diffusion v1.5 in Q4\_0 format). Advantages include zero API rate limits and full privacy. However, GGML backends have longer latency (10-15 seconds per image on CPU) and less support for such complex processes as ControlNet.
 
-\textbf{Implementation Note:} We initially attempted image-to-image refinement using GGML to improve character consistency by conditioning on previous panels. However, this approach proved infeasible due to prohibitive latency (30-45 seconds per refinement iteration), making it impractical for multi-panel generation.
+\textbf{Implementation note:} we first tried image to image refinement with the help of GGML to enhance character consistency through conditioning on previous panels. But this method was impossible because of the prohibitive latency (30-45 seconds per refinement cycles each), and thus impractical when generating multi-panels.
 
 \subsubsection{HuggingFace Inference API}
 
-Leverages HuggingFace's free-tier Inference API with models like \texttt{stabilityai/stable-diffusion-xl-base-1.0}. Rate limits (approximately 100 requests/day for free accounts) necessitate intelligent prompt optimization to minimize API calls. We implement a caching strategy: background and setting prompts are hashed, and previously generated images with matching hashes are reused.
+Builds on HuggingFace free-tier Inference API using such models as \texttt{stabilityai/stable-diffusion-xl-base-1.0}. Rate limits (about 100 requests/day of free accounts) require smart prompt optimization to minimize API calls. We adopt a back caching strategy: ground and setting prompts are hashed, as well as images that have already been generated with matching hashes are reused.
 
 \subsubsection{Replicate API}
 
-Provides access to advanced models (e.g., FLUX.1-dev) with superior prompt adherence. However, free-tier quotas are limited, making this backend suitable for final refinement passes rather than bulk generation.
+Indicates access to higher level models (e.g. FLUX.1-dev) with superior prompt adherence. This however is limited by free-tier quotas, making this backend which is suitable to final refinement, as opposed to bulk generation.
 
 \subsection{Dialogue Integration and Text Overlay}
 
-Comic dialogues can be integrated via two modes:
+There are two ways through which comic dialogues can be incorporated:
 \begin{enumerate}
-\item \textbf{In-Image Generation:} Dialogue text is embedded directly into image generation prompts (e.g., "character saying 'Hello'"). This approach, while conceptually appealing, encountered significant limitations due to the weak text rendering capabilities of current diffusion models. Generated text often exhibits spelling errors, inconsistent fonts, and poor positioning.
-\item \textbf{Post-Generation Overlay:} Dialogue is added after image generation using a \texttt{TextOverlay} engine built on Pillow. Speech bubbles are positioned algorithmically based on panel dimensions, and text is rendered using readable fonts (Arial, Comic Sans MS). This approach, while sacrificing aesthetic integration, ensures legibility and accuracy.
+\item \textbf{In Image Generation:} Dialogue text is entrenched in image generation elicits (e.g., "character greeting with a Welcome, Hello"). This approach, while conceptually pleasing, faced huge constraints through the poor text generating abilities of existing diffusion models. Generated text often has spelling mistakes, imprecise fonts and mis-positioning.
+\item \textbf{Post-generation Overlay:} Dialogue is a post-generation method in which dialogue is inserted after generating images using a \texttt{TextOverlay} engine made based on Pillow. Bubbles containing speech are placed aesthetically determined by panel size, and pasted in through readable fonts that are plain (Arial, Comic Sans MS). That style, though giving up beauty integration, has a guaranteed legibility and accuracy.
 \end{enumerate}
 
-\textbf{Limitation:} Despite experimenting with specialized models and prompt engineering, we found that current free-tier diffusion models lack sufficient capability to generate high-quality speech bubbles directly in images. Consequently, ComicCrafter defaults to post-generation text overlay, which provides reliable results but reduces visual cohesion.
+\textbf{Limitations:} In spite of having tried some specialized models and timely engineering, we discovered that the existing free-tier diffusion engines do not have the capacity to enable them to offer enough capacity ability to create speech bubbles of high quality in pictures themselves. Consequently, ComicCrafter goes to post-generation text overlay which is stable visual cohesion but not visual results.
 
 \subsection{FastAPI Web Interface}
 
@@ -314,51 +313,51 @@ The web UI provides a form-based interface for story input, style customization,
 
 \subsubsection{Datasets}
 
-We evaluate ComicCrafter on three test sets:
+The model is tested on three test sets:
 \begin{enumerate}
-\item \textbf{Custom Narratives:} 15 user-generated stories (100-300 words each) spanning genres: fantasy, sci-fi, superhero, slice-of-life.
-\item \textbf{FlintstonesSV:} 20 episode descriptions from the Flintstones Story Visualization dataset~\cite{zhou2024storydiffusion}.
-\item \textbf{PororoSV:} 15 episode descriptions from the Pororo dataset~\cite{he2024dreamstory}.
+\item \textbf{Too-Personal:} 15 user narratives (100-300 words a piece) genres served n genius: fantasy, science fiction, superhero, real-life.
+\item \textbf{FlintstonesSV:} 20 episode descriptions of the story visualization Flintstones dataset~\cite{zhou2024storydiffusion}.
+\item \textbf{PororoSV:} 15 episodes description of Pororo dataset~\cite{he2024dreamstory}.
 \end{enumerate}
 
 \subsubsection{Evaluation Metrics}
 
 \textbf{Character Consistency:}
 \begin{itemize}
-\item \textbf{DINO Similarity:} We extract features from generated character images using DINO-ViT and compute cosine similarity between panels featuring the same character. Higher scores indicate better consistency.
-\item \textbf{LPIPS Distance:} Learned Perceptual Image Patch Similarity measures perceptual distance. Lower LPIPS indicates more consistent character rendering.
+\item \textbf{DINO Similarity:} We retrieve character images features using DINO-ViT compute similarity between panels in DINO-ViT using cosine the same character. The scores above 5 consistency.
+\item \textbf{LPIPS Distance:} Learned Perceptual Image Patch Similarly perceptual distance. The decrease in LPIPS means that there is a more regular character rendering.
 \end{itemize}
 
 \textbf{Narrative Coherence:}
 \begin{itemize}
-\item \textbf{CLIP-T Score:} Measures text-image alignment by computing cosine similarity between CLIP embeddings of scene descriptions and generated images.
+\item \textbf{CLIP-T Score:} used to determine text-image correspondence by computing cosine similarity description of scenes CLIP embeddings vs generated image CLIP embeddings vs generated image Embedding of scene descriptions vs generated images.
 \end{itemize}
 
 \textbf{Visual Quality:}
 \begin{itemize}
-\item \textbf{Aesthetic Score:} Uses a pretrained aesthetic predictor to rate image quality (scale 1-10).
-\item \textbf{FID Score:} Fréchet Inception Distance between generated images and a reference comic dataset (lower is better).
+\item \textbf{Aesthetic Score:} Visual perception Uses a pretrained visual aesthetic predictor to score image quality (scale 1-10).
+\item \textbf{FID Score:} Fréchet Inception Distance between generated images and a reference comic dataset (better the lower).
 \end{itemize}
 
 \textbf{System Performance:}
 \begin{itemize}
-\item \textbf{Generation Success Rate:} Percentage of scenes successfully generated without errors.
-\item \textbf{Latency:} End-to-end time for complete comic generation.
-\item \textbf{API Call Efficiency:} Total API requests required per comic page.
+\item \textbf{Generation Success Rate:} Percentage of scenes generated without errors.
+\item \textbf{Latency:} Turbo round trip of full generation of comic.
+\item \textbf{API Efficiency:} API calls made per comic page.
 \end{itemize}
 
-\subsubsection{Baselines}
+\subsubsection{Competitors}
 
-We compare ComicCrafter against:
+We compare ComicCrafter to:
 \begin{enumerate}
-\item \textbf{Sequential Agent Coordination:} Traditional pipeline without LangGraph (no retry logic).
-\item \textbf{StoryDiffusion~\cite{zhou2024storydiffusion}:} State-of-the-art story visualization (requires GPU fine-tuning; we use published results).
-\item \textbf{DreamStory~\cite{he2024dreamstory}:} Open-domain story visualization (uses proprietary DALL-E; results from paper).
+\item \textbf{Sequential Agent Coordination:} Innate pipeline without LangGraph (no retry logic).
+\item \textbf{StoryDiffusion~\cite{zhou2024storydiffusion}:} Visualize stories with state-of-the-art appearance (needed the use of GPU velocity; we take the published results).
+\item \textbf{DreamStory~\cite{he2024dreamstory}:} Visualization of open-domain stories (proprietary DALL-E; results from paper).
 \end{enumerate}
 
 \subsection{Quantitative Results}
 
-Table~\ref{tab:main_results} presents comprehensive evaluation results across all metrics.
+The detailed analysis of the results of all metrics is provided in Table~\ref{tab:main_results}.
 
 \begin{table}[t]
 \centering
@@ -389,18 +388,18 @@ API Calls (per page) $\downarrow$ & 8.3 $\pm$ 1.2 & 9.7 $\pm$ 1.8 & N/A & N/A \\
 
 \textbf{Key Findings:}
 \begin{enumerate}
-\item \textbf{Character Consistency:} ComicCrafter achieves DINO similarity of 0.72, substantially outperforming sequential coordination (0.58) by 24\%. While StoryDiffusion (0.84) remains superior due to fine-tuned consistency mechanisms, ComicCrafter's RAG-based approach demonstrates competitive performance without requiring GPU training.
+\item \textbf{Character Consistency:} ComicCrafter has similarity in DINO of 0.72, significantly better than sequential coordination (0.58) by a figure of 24. While StoryDiffusion (0.84) is much better because fine-tuned consistency mechanisms in its approach of competitive performance without the use of GPU training.
 
-\item \textbf{Narrative Coherence:} CLIP-T scores (0.68) indicate strong text-image alignment, comparable to proprietary baselines. This validates our RAG-augmented prompt generation strategy.
+\item \textbf{Narrative Coherence:} CLIP-t scores (0.68) are textimage similar to proprietary baselines, alignment. This validates our RAG augmented prompt generation strategy.
 
-\item \textbf{Generation Reliability:} LangGraph-based orchestration achieves 89.2\% success rate versus 72.5\% for sequential approaches—a 23\% improvement. Automatic retry logic handles transient API failures gracefully.
+\item \textbf{Generation Reliability:} LangGraph orchestration agrees at 89.2\% success rate compare to 72.5\% sequential approach improvement by 23 per cent. Retriggering is accomplished automatically on Intermittent API failures.
 
-\item \textbf{Efficiency:} ComicCrafter reduces API calls by 14\% compared to sequential methods through intelligent caching and single-shot generation.
+\item \textbf{Efficiency:} Compared to sequential, ComicCrafter saves 14 percent of API calls techniques based on smart caching and one-shoot generation.
 \end{enumerate}
 
 \subsection{Ablation Study}
 
-Table~\ref{tab:ablation} presents ablation results examining the contribution of key components.
+Table~\ref{tab:ablation} shows the ablation results that investigate the role of the important components.
 
 \begin{table}[t]
 \centering
@@ -421,14 +420,14 @@ w/o Style Descriptors & 0.69 $\pm$ 0.10 & 88.0 $\pm$ 4.5 \\
 
 \textbf{Analysis:}
 \begin{itemize}
-\item \textbf{RAG Impact:} Removing character retrieval reduces DINO similarity from 0.72 to 0.54 (25\% degradation), confirming that RAG-augmented prompts are crucial for consistency.
-\item \textbf{LangGraph Value:} Sequential coordination decreases success rate by 18.8\%, demonstrating the importance of stateful workflows and retry mechanisms.
-\item \textbf{Retry Logic:} Disabling retry reduces success rate by 14.5\% (from 89.2\% to 76.3\%), highlighting the value of graceful error handling.
+\item \textbf{RAGImpact:} The elimination of character retrieval decreases DINO similarity of 0.72 to 0.54 (25\% degradation), which verifies the claim that RAG-augmented prompts are crucial for consistency.
+\item \textbf{LangGraphValue:} Sequentialcoordination reduces the potential changes in success rate (18.8 percent) proof of the usefulness of stateful workflow and recover methods.
+\item \textbf{Retry Logic:} The disablement of retry decreases the instance of success by 14.5 points (89.2\% to 76.3\%), shows the importance of graceful handling of errors.
 \end{itemize}
 
 \subsection{LLM Provider Comparison}
 
-Table~\ref{tab:llm_comparison} compares different free-tier LLM providers for story decomposition.
+Table~\ref{tab:llm_comparison} provides a comparison between various free-tier providers of LLM used in story decomposition.
 
 \begin{table}[t]
 \centering
@@ -447,14 +446,14 @@ HuggingFace (Llama 2 7B) & 5.2 $\pm$ 1.3 & 78.3 & 85.1 \\
 
 \textbf{Key Findings:}
 \begin{itemize}
-\item \textbf{Groq Llama 3.3 70B} provides the best balance: fastest response time (2.3s), highest parse success (96.2\%), and robust JSON generation (98.5\%). This makes it our default LLM provider.
-\item \textbf{Google Gemini 2.0 Flash} offers comparable quality but with slightly higher latency (3.8s).
-\item \textbf{HuggingFace Llama 2 7B} (free tier) struggles with complex prompt adherence, resulting in lower parse success (78.3\%) and frequent JSON formatting errors.
+\item A balance between fastest response time and the fastest speed is \textbf{Groq Llama 3.3 70B}. Meanwhile, the largest success rate of parsing (2.3s) was found with the highest success rate (96.2\%), and the highest level of JSON generation (98.5\%). This renders it our default right to LLM.
+\item \textbf{Google Gemini 2.0 Flash} is providing similar quality but is slightly cheaper higher latency (3.8s).
+\item \textbf{HuggingFace Llama 2 7B} (free tier) does not cope with complex prompt adherence, which made it less successful in parsing (78.3\%), and with frequent JSON formatting errors.
 \end{itemize}
 
 \subsection{Image Backend Comparison}
 
-Table~\ref{tab:backend_comparison} evaluates different image generation backends.
+Various image generation backends are assessed in Table~\ref{tab:backend_comparison}.
 
 \begin{table}[t]
 \centering
@@ -473,60 +472,60 @@ Replicate (FLUX.1) & 6.5 $\pm$ 2.3 & ~50/day & 7.1 $\pm$ 0.6 & \$0 (trial) \\
 
 \textbf{Analysis:}
 \begin{itemize}
-\item \textbf{GGML} eliminates rate limits entirely but suffers from high CPU-based latency (12.3s per image) and lower aesthetic quality (5.8/10) due to quantized models.
-\item \textbf{HuggingFace SDXL} offers the best latency-quality trade-off for free-tier users, though daily quotas constrain batch generation.
-\item \textbf{Replicate FLUX.1} achieves highest aesthetic scores (7.1/10) but has limited free quotas, making it suitable only for final refinement passes.
+\item \textbf{GGML} eliminates rate limits completely but has problems with high CPU-based latency (12.3s/image) and worse aesthetic (5.8/10) because of quantized models.
+\item \textbf{HuggingFace SDXL} provides the best latency quality-price tradeoff on free-tier though batch generation is limited by quotas per day, users.
+\item \textbf{Replicate FLUX.1} has the best aesthetic scores (7.1/10) and limited free quotas, and therefore it is only applicable to end-refinement passes.
 \end{itemize}
 
 \subsection{Human Evaluation}
 
-We conducted a user study with 25 participants evaluating 10 generated comics across four dimensions (1-5 Likert scale):
+A 25-participant user study was done where each of the 10 generated comics underwent an evaluation on four dimensions (1-5 Likert scale):
 \begin{enumerate}
-\item \textbf{Character Recognizability:} Can you identify the same character across panels? (Mean: 3.8 $\pm$ 0.6)
-\item \textbf{Story Comprehension:} Does the comic clearly convey the narrative? (Mean: 4.1 $\pm$ 0.5)
-\item \textbf{Visual Appeal:} How aesthetically pleasing are the images? (Mean: 3.5 $\pm$ 0.7)
-\item \textbf{Overall Quality:} Would you share this comic? (Mean: 3.6 $\pm$ 0.6)
+\item \textbf{Recognizability Character:} Can you recognize the same character in different panels? (Mean: 3.8 $\pm$ 0.6)
+\item \textbf{Story Comprehension:} Have the story been told clearly well? (Mean: 4.1 $\pm$ 0.5)
+\item \textbf{Visual Appeal:} To what extent are the images appealing? (Mean: 3.5 $\pm$ 0.7)
+\item \textbf{Comprehensive Quality:} Do you like this comic? (Mean: 3.6 $\pm$ 0.6)
 \end{enumerate}
 
-Results indicate that ComicCrafter produces comics of acceptable quality for casual sharing, with story comprehension rated highest (4.1/5). Visual appeal (3.5/5) remains a limitation, reflecting the constraints of free-tier diffusion models.
+The findings show that ComicCrafter creates comics of a reasonable quality to share with friends, and understanding of stories is rated the highest (4.1/5). Image quality, visual apple (3.5/5) is a problem, which is a limited feature of free-tier diffusion models.
 
 \section{Discussion and Limitations}
 \label{sec:discussion}
 
 \subsection{Discussion of Results}
 
-Our experimental evaluation demonstrates that ComicCrafter successfully achieves its primary objective: generating coherent, character-consistent comics entirely within zero-cost constraints. The LangGraph-based multi-agent orchestration provides significant advantages over sequential approaches, particularly in generation reliability (89.2\% success rate) and character consistency (DINO similarity 0.72). The RAG-powered character memory proves highly effective, improving consistency by 25\% compared to non-RAG baselines without requiring expensive fine-tuning.
+By performing the experimental assessment, we confirm that ComicCrafter is able to meet its main goal which is to create the coherent, character-consistent comics within zero-cost boundaries. On the one hand, the multi-agent orchestration of LangGraph is very advantageous to the sequential methods, both in terms of generation reliability (89.2\% success rate) and characters consistency (DINO similarity 0.72). The character memory based on RAG is very successful in enhancing consistency, and it is 25 times more effective than non-RAG baselines at the cost of no fine-tuning.
 
-The comparative analysis of LLM providers reveals that Groq's Llama 3.3 70B offers the optimal balance of speed, accuracy, and free-tier accessibility for story decomposition tasks. Similarly, HuggingFace's SDXL backend provides the best latency-quality trade-off for image generation under rate-limited conditions.
+Comparative evaluation of the providers of the LLM shows that Groq Llama 3.3 70B is the most suitable to be used in situations when it comes to the tasks of decomposing stories on the basis of speed, accuracy and free-tier accessibility. Equally, the SDXL backend of HuggingFace offers the optimal latency-quality trade-off in the generation of images when limited by a rate.
 
 \subsection{Limitations}
 
-Despite these achievements, ComicCrafter exhibits several limitations that warrant discussion:
+Regardless of such accomplishments, there are several weaknesses that ComicCrafter displays:
 
-\subsubsection{Image-to-Image Refinement Latency}
+\subsubsection{Lateness Image-to-Image Refinement}
 
-We initially hypothesized that using GGML's image-to-image capabilities to refine character appearances across panels would enhance consistency. However, practical experimentation revealed prohibitive latency: each refinement iteration required 30-45 seconds on consumer-grade CPUs, rendering multi-panel generation infeasible. A comic with 6 panels would require 3-4.5 minutes per refinement pass, contradicting our usability objectives. Consequently, we abandoned this approach in favor of RAG-augmented text prompting, which achieves acceptable consistency with minimal latency overhead.
+The first hypothesis we had was that we would be able to improve consistency in the appearance of character images over multiple panels by using the image-to-image features of GGMI to refine them. Nonetheless, empirical experimentation showed that it was prohibitively slow on consumer grade CPUs: even a single itteration of the refinement process took 30-45 seconds, which is too slow to use with multi-panel generation. With 6 panels, it would take 3-4.5 min/refinement pass of a comic, which would not align with the usability goals. As a result, we have dropped this strategy in favor of RAG-augmented text prompting which is reasonably consistent with low latency overhead.
 
-\textbf{Future Direction:} GPU-accelerated GGML inference or cloud-based image-to-image APIs (if free tiers emerge) could make refinement-based consistency practical.
+\textbf{Future Direction:} Refinement-based consistency (though with GPU-accelerated GGML inference or free tiers of cloud-based image-to-image APIs should emerge) might become practically useful.
 
 \subsubsection{Dialogue Bubble Generation}
 
-Current diffusion models, including those accessible via free-tier APIs, lack robust text rendering capabilities. Our experiments with in-image dialogue generation (embedding text directly into prompts like "character saying 'Hello world'") consistently produced:
+The existing diffusion frameworks, including those on free-tier APIs, do not have a thorough text rendering system. In-image dialogue generation (putting text right in the Prompts such as character saying ,"Hello World,") in our experiments delivering the strongest results consisted in continually generating:
 \begin{itemize}
-\item \textbf{Spelling Errors:} Models frequently misspell or omit characters from prompted text.
-\item \textbf{Font Inconsistencies:} Generated text exhibits irregular fonts, sizes, and orientations.
-\item \textbf{Poor Positioning:} Speech bubbles often overlap character faces or extend beyond panel boundaries.
+\item \textbf{Spelling mistakes:} Models often spell incorrect words or leave out letters in written text that they are prompted to write.
+\item \textbf{Font inconsistencies:} Generated texts have inconsistent fonts, font sizes and font orientations.
+\item \textbf{incorrect positioning:} Bubbles of speech are frequently placed over the face of characters, or sometimes that of panel lines.
 \end{itemize}
 
-These issues stem from diffusion models' limited understanding of typographic structure and spatial reasoning. As a result, ComicCrafter defaults to post-generation text overlay using Pillow, which ensures legibility but reduces visual integration (overlaid bubbles may obscure background details or appear "floating").
+The latter problems are because diffusion models have little knowledge of typographical structure and spatial reasoning. This causes ComicCrafter to default to the use of post-generation text overlay with Pillow, which makes the text readable but creates less visual fusion (overlapping bubbles can cover some background image or can look like they are floating).
 
-\textbf{Future Direction:} Specialized text-conditioned diffusion models (e.g., extensions of Glyph-SDXL) or multi-stage pipelines (generate background first, then conditionally add text) may address this limitation.
+\textbf{Future Directions:} This limitation can be overcome in special purpose text-conditioned diffusion models (e.g. extension of Glyph-SDXL) or in multi-stage pipelines (first generate the background, later conditionally add text).
 
-\subsubsection{Character Consistency Ceiling}
+\subsubsection{A consistent and accommodating character}
 
-While ComicCrafter's RAG-based approach achieves DINO similarity of 0.72, it falls short of state-of-the-art methods like StoryDiffusion (0.84), which employs fine-tuned self-attention mechanisms. RAG-augmented prompts provide textual descriptions of characters, but diffusion models may interpret these descriptions inconsistently (e.g., "tall warrior in silver armor" might yield varying armor designs across panels).
+Although the RAG based approach of ComicCrafter (0.72) is similar to DINO (0.72), it is not as good as the latest and cutting-edge model of StoryDiffusion (0.84), which uses fine-tuned self-attention schemes. RAG augmented prompts can offer textual description of characters, which can be erroneously understood by diffusion models (e.g., tall warrior in silver armor can produce different armor designs at different panels).
 
-\textbf{Future Direction:} Integrating reference image conditioning (when APIs support it) or adopting hybrid approaches combining RAG with lightweight adapter modules could narrow this gap.
+\textbf{Future Direction:} This gap could be reduced by means of either reference image conditioning (where APIs provide this) or by employing more hybrid solutions between RAG and lightweight adapter modules.
 
 \subsubsection{Free-Tier Rate Limits}
 
