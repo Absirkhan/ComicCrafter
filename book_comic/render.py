@@ -3,20 +3,24 @@
 import base64
 import logging
 import math
+import json
 from dataclasses import dataclass
 from io import BytesIO
 from pathlib import Path
 from typing import Dict, List, Optional
 
-from PIL import Image, ImageOps
+from PIL import Image, ImageOps, ImageDraw
+from PIL.PngImagePlugin import PngInfo
 
-from book_comic.art_check import draw_checked, request_art
+from book_comic.scene_requirements import scene_requirements
+from book_comic.art_check import ArtCheckError, draw_checked, request_art
 from book_comic.image_prompts import NO_TEXT, panel_prompt, sheet_prompt  # noqa: F401  (NO_TEXT re-exported)
 from generation.openrouter_image_client import OpenRouterImageClient, closest_aspect_ratio
 from generation.vision_client import VisionClient
 from layout.bubble_planner import default_plan, plan_bubbles
-from layout.captions import draw_note, note_corner
-from layout.comic_bubbles import is_rtl, render_dialogue
+from layout.captions import NOTE_SIZE, draw_note, note_corner, text_box
+from layout.comic_bubbles import head_box, is_rtl, render_dialogue
+from layout.lettering import overlap_area
 from layout.panel_layout import LayoutManager, LayoutType
 
 logger = logging.getLogger(__name__)
@@ -35,7 +39,7 @@ class RenderOptions:
         font_path: Lettering font file for bubbles, captions and notes (default: bundled + system fonts)
         fail_on_image_error: Raise when an image call fails instead of drawing a gray placeholder
         check_art: Ask the vision model whether the art (and the character sheet) has painted-in writing or extra
-            hands, and redraw it if so, up to three draws in all, keeping the best
+            hands or design/scene drift, with at most three draws; unchecked or rejected art raises
         chain_panels: Send the previous panel of the page as a reference, for continuity
         photo: Reference photo of the main character (http or data: URL)
         sheet_path: Where the main character's sheet is drawn once (and reused); it is then a reference
@@ -82,6 +86,8 @@ class PageRenderer:
         self.options = options or RenderOptions()
         self._sheet: Optional[str] = None
         self._previous: Optional[Image.Image] = None
+        self.prop_anchors = {}
+        self.audit = []
 
     @property
     def total_cost(self) -> float:
@@ -95,9 +101,10 @@ class PageRenderer:
         language = (self.cast.get("language") or "").lower()
         return language in RTL_LANGUAGES if language else any(is_rtl(t) for t in texts)
 
-    def _art(self, prompt: str, references: List[str], aspect_ratio: str) -> Image.Image:
+    def _art(self, prompt: str, references: List[str], aspect_ratio: str, size=None, requirements=()) -> Image.Image:
         if self.options.check_art:
-            return draw_checked(self.images, self.vision, prompt, references, aspect_ratio)
+            return draw_checked(self.images, self.vision, prompt, references, aspect_ratio, size=size,
+                                requirements=requirements, props=self.cast.get("props", []), anchors=self.prop_anchors, audit=self.audit)
         return request_art(self.images, prompt, references, aspect_ratio)
 
     def character_sheet(self) -> Optional[str]:
@@ -115,11 +122,18 @@ class PageRenderer:
                     sheet = request_art(self.images, prompt, references, "2:3")
                 sheet.save(path)
             except Exception as e:
-                if self.options.fail_on_image_error:
+                if self.options.fail_on_image_error or isinstance(e, ArtCheckError):
                     raise
                 logger.warning(f"Character sheet failed; drawing panels without it: {e}")
                 return None
         with Image.open(path) as sheet:
+            try:
+                stored = json.loads(sheet.info.get("comic_prop_anchors", "{}"))
+                names = {p["name"] for p in self.cast.get("props", [])}
+                if isinstance(stored, dict):
+                    self.prop_anchors.update({k: v for k, v in stored.items() if k in names and isinstance(v, str) and len(v) <= 600})
+            except (ValueError, TypeError):
+                pass
             self._sheet = image_url(sheet.convert("RGB"))
         return self._sheet
 
@@ -127,7 +141,7 @@ class PageRenderer:
         people = "; ".join(
             f"{c['name_en']}: {c['look']}" for c in map(self._character, panel.get("characters", []))
         )
-        return panel_prompt(self.cast, panel, people, roles)
+        return panel_prompt({**self.cast, "prop_anchors": self.prop_anchors}, panel, people, roles)
 
     def _draw_panel(self, panel: Dict, size: tuple) -> Image.Image:
         roles, references = [], []
@@ -138,11 +152,15 @@ class PageRenderer:
         if self.options.chain_panels and self._previous is not None:
             roles.append("previous")
             references.append(image_url(self._previous))
+        requirements = scene_requirements(panel["scene"], panel.get("requirements", []))
         try:
-            art = self._art(self._image_prompt(panel, tuple(roles)), references, closest_aspect_ratio(*size))
+            art = self._art(self._image_prompt(panel, tuple(roles)), references, closest_aspect_ratio(*size), size=size, requirements=requirements)
+            for prop in art.info.get("comic_verification", {}).get("prop_checks", []):
+                if prop["visible"]:
+                    self.prop_anchors.setdefault(prop["name"], prop["observed"])
             return ImageOps.fit(art, size, Image.Resampling.LANCZOS)
         except Exception as e:
-            if self.options.fail_on_image_error:
+            if self.options.fail_on_image_error or isinstance(e, ArtCheckError):
                 raise
             logger.warning(f"Panel image failed, using a gray placeholder: {e}")
             return Image.new("RGB", size, (200, 200, 200))
@@ -167,10 +185,28 @@ class PageRenderer:
             plan = plan_bubbles(
                 image, list(zip(speakers, texts)), bool(caption), rtl, vision=self.vision, reserved_corners=reserved
             )
+        reliable_plan = plan is not None and plan.protected_checked
         plan = plan or default_plan(len(texts))
         font = self.options.font_path
-        lettered = render_dialogue(image, texts, caption, plan, kinds=kinds, rtl=rtl, font_path=font)
-        return draw_note(lettered, note, rtl=rtl, font_path=font)
+        try:
+            if not reliable_plan:
+                raise ValueError("comic_lettering_no_space")
+            reserved = []
+            if note:
+                box = text_box(ImageDraw.Draw(image), image.size, note, max(14, int(image.height * NOTE_SIZE)),
+                               note_corner(rtl), font, dry=True)
+                subjects = [(int(x * image.width), int(y * image.height), int(w * image.width), int(h * image.height))
+                            for x, y, w, h in plan.protected]
+                subjects += [head_box(p, image.size) for p in plan.speakers if p]
+                if any(overlap_area(box, subject) for subject in subjects):
+                    raise ValueError("comic_lettering_no_space")
+                reserved.append(box)
+            lettered = render_dialogue(image, texts, caption, plan, kinds=kinds, rtl=rtl, font_path=font, reserved=reserved)
+            return draw_note(lettered, note, rtl=rtl, font_path=font)
+        except ValueError as error:
+            if str(error) not in ("comic_lettering_no_space", "comic_lettering_overflow"):
+                raise
+        raise ValueError("comic_lettering_no_space")
 
     def render_page(self, panels: List[Dict], path: Path) -> Path:
         """Draw, letter and compose one page. Unlettered art is kept as art_<page>_<n>.png beside it."""
@@ -184,6 +220,12 @@ class PageRenderer:
             self._previous = art
             images.append(self._letter(art, panel))
 
+        if self.options.sheet_path and Path(self.options.sheet_path).exists() and self.prop_anchors:
+            with Image.open(self.options.sheet_path) as sheet:
+                metadata = PngInfo()
+                metadata.add_text("comic_prop_anchors", json.dumps(self.prop_anchors))
+                saved = sheet.convert("RGB")
+            saved.save(self.options.sheet_path, format="PNG", pnginfo=metadata)
         page = self.layouts.compose_page(panels=images, layout=layout)
         dpi = {"dpi": (self.options.dpi, self.options.dpi)} if self.options.dpi else {}
         page.save(path, format="PNG", optimize=True, **dpi)

@@ -8,11 +8,11 @@ from PIL import ImageDraw
 from layout.lettering import INK, PAPER
 
 BUBBLE_KINDS = ("speech", "thought", "shout", "whisper", "broadcast", "fear", "song")
-# Text size per kind: a shout is louder, a whisper quieter
-TEXT_SCALE = {"shout": 1.15, "whisper": 0.85}
+# Shouts are larger; whispering uses a dashed outline without sacrificing readability.
+TEXT_SCALE = {"shout": 1.15}
 # How far the outline reaches past the text ellipse (spikes, scallops, drips), for collision boxes
 REACH = {"shout": 1.3, "thought": 1.15, "fear": 1.2, "song": 1.1, "broadcast": 1.05}
-WHISPER_INK = (70, 70, 70)
+WHISPER_INK = INK
 
 Points = List[Tuple[float, float]]
 

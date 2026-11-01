@@ -90,3 +90,62 @@ def test_a_note_goes_in_the_last_read_bottom_corner():
     assert rtl[250:, :400].any() and not rtl[:250].any() and not rtl[:, 400:].any()
     ltr = np.asarray(draw_note(art, "With love").convert("L")) < 128
     assert ltr[250:, 400:].any() and not ltr[:, :400].any()
+
+
+def test_wrapping_balances_short_final_lines_in_both_languages():
+    from PIL import ImageDraw
+    from layout.lettering import _wrap
+    draw = ImageDraw.Draw(Image.new('RGB', (800, 500)))
+    for text in ('Fascinating. Not a single bruise on it.', 'מעניין מאוד אין אפילו סימן אחד על זה.'):
+        font = _font(32, text, font_path=str(LETTERING_FONT))
+        width = int(draw.textlength(text, font=font) * 0.55)
+        lines = _wrap(draw, text, font, width).splitlines()
+        assert ' '.join(lines) == text
+        assert all(draw.textlength(line, font=font) <= width for line in lines)
+        assert len(lines[-1].split()) > 1
+
+
+def test_bubbles_avoid_protected_companions_and_props_in_both_languages():
+    from layout.lettering import overlap_area
+    protected = (240, 0, 220, 220)
+    for text in ('What is that?', 'מה זה שם?'):
+        art, placed = Image.new('RGB', (800, 500), 'white'), [protected]
+        draw_speech_bubble(art, text, (0.4, 0.15), (0.8, 0.8), placed)
+        assert overlap_area(placed[-1], protected) == 0
+
+
+def test_render_dialogue_passes_all_protected_subjects_to_placement(monkeypatch):
+    import layout.comic_bubbles as bubbles
+    boxes = []
+    monkeypatch.setattr(bubbles, 'draw_speech_bubble', lambda image, text, center, speaker, placed, *args: boxes.append(list(placed)))
+    for rtl, text in ((False, 'Hello'), (True, 'שלום')):
+        plan = BubblePlan(speakers=[(0.8, 0.7)], bubbles=[(0.2, 0.1)], protected=[(0.1, 0.2, 0.3, 0.4)])
+        bubbles.render_dialogue(Image.new('RGB', (800, 500), 'white'), [text], '', plan, rtl=rtl)
+        assert (80, 100, 240, 200) in boxes[-1]
+
+
+def test_unseen_speaker_has_no_tail_outside_bubble():
+    # A random downward tail used to escape the reserved bubble rectangle.
+    for kind in ('speech', 'thought', 'whisper', 'broadcast'):
+        panel = Image.new('RGB', (900, 600), (196, 214, 226))
+        placed = []
+        draw_speech_bubble(panel, 'Hello there', (.5, .4), None, placed, kind)
+        changed = np.any(np.asarray(panel) != (196, 214, 226), axis=2)
+        ys, xs = np.where(changed)
+        x,y,w,h = placed[0]
+        assert xs.min() >= x-5 and xs.max() <= x+w+5
+        assert ys.min() >= y-5 and ys.max() <= y+h+5
+
+
+def test_whisper_keeps_normal_dialogue_text_size_and_contrast():
+    panels, boxes = [], []
+    for kind in ('speech', 'whisper'):
+        panel = Image.new('RGB', (900, 600), 'white')
+        placed = []
+        draw_speech_bubble(panel, 'זה לא מצפן רגיל.', (.5,.4), None, placed, kind, font_path=str(LETTERING_FONT))
+        panels.append(np.asarray(panel)); boxes.append(placed[0])
+    assert boxes[0] == boxes[1]
+    x,y,w,h = boxes[0]
+    # Interior text remains identical; only the outline conveys whispering.
+    interior = (slice(y+h//4,y+3*h//4),slice(x+w//4,x+3*w//4))
+    assert np.array_equal(panels[0][interior], panels[1][interior])

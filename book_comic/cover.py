@@ -1,16 +1,18 @@
 """The comic's front cover: one portrait hero shot the size of a page, lettered afterwards.
 
 The image model sometimes stacks a second strip of the scene over the top (a seam), paints in
-writing, or puts the head up where the title goes; any of these gets one more image call.
+writing, or puts the head where the title goes. Seams and title placement are repaired locally;
+explicit art defects get at most one more image call, and failed inspection blocks publication.
 """
 
 import logging
 from pathlib import Path
-from typing import Dict, List, Optional, Sequence
+from typing import Dict, Optional, Sequence
 
 from PIL import Image, ImageOps
 
-from book_comic.art_check import inspect_art, request_art
+from book_comic.scene_requirements import scene_requirements
+from book_comic.art_check import ArtCheckError, inspect_art, request_art, require_checked
 from book_comic.cover_lettering import CoverFonts, letter_cover
 from book_comic.image_prompts import cover_prompt
 from book_comic.render import image_url
@@ -72,11 +74,12 @@ def render_cover(
     reference_roles: Sequence[str] = (),
     fonts: Optional[CoverFonts] = None,
     dpi: Optional[int] = None,
+    requirements=(), prop_anchors=None, audit=None,
 ) -> Path:
     """Draw and letter the cover; at most ATTEMPTS image calls.
 
-    Art without a seam, without painted-in text and with the head below the title block wins at once;
-    otherwise the better attempt (no seam, then no text, then the lower head). A seam left is cut off.
+    Remove a seam locally, then accept only inspected art with matching identity, designs and scene.
+    Unchecked or persistently rejected art raises. A high head moves lettering instead of causing a redraw.
 
     Args:
         cast: Character sheet (style, characters, optional props)
@@ -91,30 +94,36 @@ def render_cover(
         fonts: Cover faces (cover["title_font"] still overrides the title face)
         dpi: DPI tag for the saved PNG
     """
+    requirements = scene_requirements(cover.get("scene", ""), requirements)
     references, roles = list(references), list(reference_roles)
     strip = panel_strip(panels)
     if strip is not None:
         references.append(image_url(strip))
         roles.append("panels")
-    prompt = cover_prompt(cast, cover, roles)
+    prompt = cover_prompt({**cast, "prop_anchors": prop_anchors or {}}, {**cover, "requirements": requirements}, roles)
 
-    candidates: List[tuple] = []
     for _ in range(ATTEMPTS):
         art = ImageOps.fit(request_art(images, prompt, references, closest_aspect_ratio(*size)), size)
         seam = find_seam(art)
-        found = inspect_art(art, vision) if seam is None else {"head_top": None, "has_text": None, "bad_anatomy": None}
-        head = found["head_top"] if found["head_top"] is not None else 1.0
-        clean = not found["has_text"] and not found["bad_anatomy"]
-        candidates.append((seam is None, clean, head, art, seam))
-        if seam is None and clean and head >= HEAD_TOP_MIN:
-            break
-        logger.info(f"Cover attempt rejected (seam={seam}, text={found['has_text']}, anatomy={found['bad_anatomy']}, head_top={head:.2f})")
-    _, _, head, art, seam = max(candidates, key=lambda c: (c[0], c[1], c[2]))
-    if seam is not None:
-        art = ImageOps.fit(art.crop((0, seam, art.width, art.height)), size, centering=(0.5, 0.0))
+        if seam is not None:
+            art = ImageOps.fit(art.crop((0, seam, art.width, art.height)), size, centering=(0.5, 0.0))
+            if find_seam(art) is not None:
+                continue
+        found = inspect_art(art, vision, references=references, context=prompt, requirements=requirements,
+                            props=cast.get("props", []), anchors=prop_anchors)
+        report = {"accepted": None, "requirements": requirements, "checks": found, "kind": "cover"}
+        if audit is not None:
+            audit.append(report)
+        clean = require_checked(found, require_head=True)
+        report["accepted"] = clean
+        if clean:
+            head = found["head_top"]
+            break  # a high head is handled by local title placement, without another image call
+    else:
+        raise ArtCheckError("comic_cover_rejected")
 
     dpi_tag = {"dpi": (dpi, dpi)} if dpi else {}
-    # Every attempt drew the head up in the title block: letter the title at the bottom, never over the face.
+    # Move the title instead of drawing again when the accepted head is in the title block.
     letter_cover(art, cover, fonts, title_at_bottom=head < HEAD_TOP_MIN).save(path, format="PNG", optimize=True, **dpi_tag)
     logger.info(f"Saved cover {path}")
     return path

@@ -75,8 +75,8 @@ def _choose_position(
                 score += 0.3 * h if cy > speaker[1] else 0  # bubbles read best above the speaker
             if score < best_score:
                 best, best_score = (x0, y0), score
-    if best is None:
-        return int(desired[0] - bw / 2), int(desired[1] - bh / 2)
+    if best is None or bw > w - 10 or bh > h - 10:
+        raise ValueError("comic_lettering_no_space")
     return best
 
 
@@ -95,7 +95,7 @@ def draw_speech_bubble(
         image: Panel image, drawn on in place
         text: Dialogue text
         center: Desired bubble center, normalized 0-1
-        speaker: Speaker's mouth, normalized 0-1 (None points the tail down)
+        speaker: Speaker's mouth, normalized 0-1 (None draws no tail)
         placed: Areas to keep clear (heads, caption, earlier bubbles); updated in place
         kind: One of bubble_shapes.BUBBLE_KINDS; anything else is drawn as "speech"
         font_path: Lettering font file (defaults to the bundled/system fonts)
@@ -103,13 +103,13 @@ def draw_speech_bubble(
     kind = shapes.bubble_kind(kind)
     w, h = image.size
     draw = ImageDraw.Draw(image)
-    font = _font(max(16, int(h * 0.04 * shapes.TEXT_SCALE.get(kind, 1))), text, font_path)
+    font = _font(max(16, int(h * 0.05 * shapes.TEXT_SCALE.get(kind, 1))), text, font_path)
     line_width = max(2, h // 220) + (1 if kind == "shout" else 0)
 
     # Wrap to a roughly 3:1 text block so the oval stays round rather than flat
     line_height = draw.textbbox((0, 0), "Ag", font=font)[3]
     balanced = int(math.sqrt(draw.textlength(text, font=font) * line_height * 3))
-    wrapped = _wrap(draw, text, font, min(int(w * 0.26), max(balanced, int(w * 0.08))))
+    wrapped = _wrap(draw, text, font, min(int(w * 0.32), max(balanced, int(w * 0.08))))
     left, top, right, bottom = draw.multiline_textbbox((0, 0), wrapped, font=font, align="center")
     tw, th = right - left, bottom - top
     rx, ry = tw * 0.72 + 14, th * 0.78 + 12  # ellipse radii that enclose the text block
@@ -125,21 +125,24 @@ def draw_speech_bubble(
     )
     placed.append((x0, y0, bw, bh))
     cx, cy = x0 + bw / 2, y0 + bh / 2
-    target = (speaker[0] * w, speaker[1] * h) if speaker else (cx, cy + ry + h * 0.1)
-
-    if kind == "thought":
-        shapes.thought_tail(draw, cx, cy, rx * reach, ry * reach, target, line_width)
-    elif kind == "broadcast":
-        shapes.lightning_tail(draw, cx, cy, rx, ry, target, h * 0.14, line_width)
-    else:
-        tail = _tail(cx, cy, rx, ry, target, max_len=h * 0.14)
-        draw.polygon(tail, fill=INK)
-        draw.polygon(_shrink(tail, line_width * 1.6), fill=PAPER)
+    # An unseen mouth gives no direction: never invent a tail toward a random panel edge.
+    target = (speaker[0] * w, speaker[1] * h) if speaker else None
+    tail = None
+    if target is not None:
+        if kind == "thought":
+            shapes.thought_tail(draw, cx, cy, rx * reach, ry * reach, target, line_width)
+        elif kind == "broadcast":
+            shapes.lightning_tail(draw, cx, cy, rx, ry, target, h * 0.14, line_width)
+        else:
+            tail = _tail(cx, cy, rx, ry, target, max_len=h * 0.14)
+            draw.polygon(tail, fill=INK)
+            draw.polygon(_shrink(tail, line_width * 1.6), fill=PAPER)
 
     if kind == "speech":
         box = [cx - rx, cy - ry, cx + rx, cy + ry]
         draw.ellipse([box[0] - line_width, box[1] - line_width, box[2] + line_width, box[3] + line_width], fill=INK)
-        draw.polygon(_shrink(tail, line_width * 1.6), fill=PAPER)
+        if tail is not None:
+            draw.polygon(_shrink(tail, line_width * 1.6), fill=PAPER)
         draw.ellipse(box, fill=PAPER)
     else:
         shapes.draw_outline(draw, kind, shapes.outline(kind, cx, cy, rx, ry), line_width)
@@ -161,6 +164,7 @@ def render_dialogue(
     kinds: Optional[Sequence[str]] = None,
     rtl: Optional[bool] = None,
     font_path: Optional[str] = None,
+    reserved: Sequence[Rect] = (),
 ) -> Image.Image:
     """Return a copy of the panel with its caption and bubbles drawn.
 
@@ -177,7 +181,10 @@ def render_dialogue(
     rtl = any(is_rtl(t) for t in list(dialogue) + [caption]) if rtl is None else rtl
     # Every visible speaker's head is kept clear of all bubbles
     heads: List[Rect] = [head_box(s, panel.size) for s in plan.speakers if s]
-    placed = list(heads)
+    protected = [(int(x * panel.width), int(y * panel.height), int(w * panel.width), int(h * panel.height))
+                 for x, y, w, h in plan.protected]
+    heads += protected
+    placed = list(heads) + list(reserved)
 
     if caption:
         # Narration is read first, so it starts in the reading-first corner (top-right for Hebrew)

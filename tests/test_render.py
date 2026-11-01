@@ -26,7 +26,7 @@ def renderer(images, vision=None, **options):
 
 def test_an_old_script_renders_with_the_defaults(tmp_path):
     images = FakeImages([Image.new("RGB", (64, 64), "white")])
-    vision = FakeVision(lambda p, i: [{"mouth": [500, 500], "bubble": [500, 200]}])
+    vision = FakeVision(lambda p, i: {"lines": [{"mouth": [500, 500], "bubble": [500, 200]}], "protected": []})
     path = renderer(images, vision).render_page([OLD_PANEL] * 3, tmp_path / "page_01.png")
     assert Image.open(path).size == (400, 600)
     assert len(images.calls) == 3 and all(c["references"] == [] for c in images.calls)  # one plain call per panel
@@ -60,25 +60,26 @@ def test_sheet_photo_and_previous_panel_are_references(tmp_path):
 def test_art_with_painted_text_is_drawn_once_more():
     red, blue = Image.new("RGB", (10, 10), "red"), Image.new("RGB", (10, 10), "blue")
     images = FakeImages([red, blue])
-    art = draw_checked(images, FakeVision(lambda p, i: {"has_text": i.getpixel((0, 0)) == (255, 0, 0)}), "scene", ["ref"], "2:3")
+    art = draw_checked(images, FakeVision(lambda p, i: {"has_text": i.getpixel((0, 0)) == (255, 0, 0), "bad_anatomy": False, "identity_mismatch": False, "design_mismatch": False, "scene_mismatch": False}), "scene", ["ref"], "2:3")
     assert art.getpixel((0, 0)) == (0, 0, 255) and len(images.calls) == 2
     assert "Absolutely no writing" in images.calls[1]["prompt"]
     images = FakeImages([red, blue])
     def broken(prompt, image):
         raise RuntimeError("down")
-    assert draw_checked(images, FakeVision(broken), "scene", [], "2:3").getpixel((0, 0)) == (255, 0, 0)
-    assert len(images.calls) == 1  # a failed check never blocks the art
+    with pytest.raises(ValueError, match="comic_art_check_unavailable"):
+        draw_checked(images, FakeVision(broken), "scene", [], "2:3")
+    assert len(images.calls) == 1  # a failed check blocks without spending another image call
 
 
 def test_art_with_a_third_hand_is_drawn_once_more_with_the_anatomy_rule():
     red, blue = Image.new("RGB", (10, 10), "red"), Image.new("RGB", (10, 10), "blue")
     images = FakeImages([red, blue])
-    art = draw_checked(images, FakeVision(lambda p, i: {"has_text": False, "bad_anatomy": i.getpixel((0, 0)) == (255, 0, 0)}), "scene", [], "2:3")
+    art = draw_checked(images, FakeVision(lambda p, i: {"has_text": False, "bad_anatomy": i.getpixel((0, 0)) == (255, 0, 0), "identity_mismatch": False, "design_mismatch": False, "scene_mismatch": False}), "scene", [], "2:3")
     assert art.getpixel((0, 0)) == (0, 0, 255) and len(images.calls) == 2
     assert images.calls[1]["prompt"].startswith("scene Human anatomy:")
     assert "Absolutely no writing" not in images.calls[1]["prompt"]  # only the broken rule is repeated
     images = FakeImages([red, blue])
-    assert draw_checked(images, FakeVision(lambda p, i: {"has_text": False, "bad_anatomy": False}), "scene", [], "2:3") \
+    assert draw_checked(images, FakeVision(lambda p, i: {"has_text": False, "bad_anatomy": False, "identity_mismatch": False, "design_mismatch": False, "scene_mismatch": False}), "scene", [], "2:3") \
         .getpixel((0, 0)) == (255, 0, 0) and len(images.calls) == 1
 
 
@@ -91,7 +92,7 @@ def test_every_drawing_of_a_person_asks_for_ordinary_human_anatomy():
 
 def test_bubble_kinds_and_notes_reach_the_lettering(tmp_path):
     panel = {**OLD_PANEL, "dialogue": [{"speaker": "Omer", "text": "Hi", "bubble": "shout"}], "note": "With love"}
-    vision = FakeVision(lambda p, i: [{"mouth": [500, 500], "bubble": [500, 200]}])
+    vision = FakeVision(lambda p, i: {"lines": [{"mouth": [500, 500], "bubble": [500, 200]}], "protected": []})
     plain = renderer(FakeImages([Image.new("RGB", (64, 64), "white")]), vision)
     art = Image.new("RGB", (380, 180), "white")
     assert plain._letter(art, panel).tobytes() != plain._letter(art, OLD_PANEL).tobytes()
@@ -124,7 +125,7 @@ def colours(*names):
 
 def judge(flags):
     """Vision fake: the answer for each colour of art, by its top-left pixel."""
-    return FakeVision(lambda p, i: flags.get(i.getpixel((0, 0)), {}))
+    return FakeVision(lambda p, i: {"has_text": False, "bad_anatomy": False, "identity_mismatch": False, "design_mismatch": False, "scene_mismatch": False, **flags.get(i.getpixel((0, 0)), {})})
 
 
 RED, GREEN, BLUE = (255, 0, 0), (0, 128, 0), (0, 0, 255)
@@ -137,14 +138,11 @@ def test_a_third_draw_happens_when_the_second_is_still_bad():
     assert art.getpixel((0, 0)) == BLUE and len(images.calls) == 3
 
 
-def test_the_best_of_three_is_kept_when_all_are_bad():
+def test_all_rejected_draws_fail_instead_of_returning_the_least_bad():
     images = FakeImages(colours("red", "green", "blue"))
-    both = {"bad_anatomy": True, "has_text": True}
-    art = draw_checked(images, judge({RED: both, GREEN: TEXT, BLUE: HANDS}), "scene", [], "2:3")
-    assert art.getpixel((0, 0)) == GREEN and len(images.calls) == 3  # no extra hands beats no text
-    images = FakeImages(colours("red", "green", "blue"))
-    art = draw_checked(images, judge({RED: HANDS, GREEN: HANDS, BLUE: HANDS}), "scene", [], "2:3")
-    assert art.getpixel((0, 0)) == RED  # a tie keeps the earliest
+    with pytest.raises(ValueError, match="comic_art_rejected"):
+        draw_checked(images, judge({RED: HANDS, GREEN: TEXT, BLUE: HANDS}), "scene", [], "2:3")
+    assert len(images.calls) == 3
 
 
 def test_a_clean_first_draw_costs_one_image_and_one_vision_call():
@@ -187,3 +185,131 @@ def test_the_sheet_is_redrawn_when_flagged_and_drawn_once_when_clean(tmp_path):
     vision = judge({RED: HANDS})
     renderer(images, vision, sheet_path=tmp_path / "plain.png").character_sheet()
     assert len(images.calls) == 1 and vision.prompts == []
+
+
+def test_reference_priority_preserves_design_but_allows_new_shots():
+    from book_comic.image_prompts import panel_prompt, cover_prompt
+    for prompt in (panel_prompt(CAST, {'scene': 'Close-up: Dana holds the lantern'}, 'Dana: red coat', ('photo', 'sheet', 'previous')),
+                   cover_prompt(CAST, {'scene': 'Dana on the cliff'}, ('photo', 'sheet', 'panels'))):
+        assert 'Reference priority:' in prompt
+        assert 'head-to-body proportions' in prompt
+        assert 'exact garment construction' in prompt
+        assert 'do not copy a prior composition' in prompt
+
+
+@pytest.mark.parametrize('defect', ['identity_mismatch', 'design_mismatch', 'scene_mismatch'])
+def test_identity_design_and_shot_mismatches_are_rejected(defect):
+    images = FakeImages(colours('red', 'blue'))
+    art = draw_checked(images, judge({RED: {defect: True}}), 'scene', ['data:sheet'], '2:3')
+    assert art.getpixel((0, 0)) == BLUE
+    assert len(images.calls) == 2
+
+
+def test_inspection_passes_actual_references_to_vision():
+    class Vision:
+        def ask_json(self, prompt, images):
+            assert len(images) == 2 and images[1] == 'data:sheet'
+            assert 'head/body proportions' in prompt and 'wrong planned shot' in prompt
+            return {'has_text': False, 'bad_anatomy': False, 'identity_mismatch': False, 'design_mismatch': False, 'scene_mismatch': False}
+    inspect_art(Image.new('RGB', (10, 10)), Vision(), references=['data:sheet'], context='Reference image 1 is the sheet')
+
+
+@pytest.mark.parametrize('language, caption, dialogue', [('en', 'The owl stirred.', 'What happened?'), ('he', 'הינשוף התעורר.', 'מה קרה כאן?')])
+def test_crowded_art_rejects_without_shrinking_or_another_image_call(language, caption, dialogue):
+    from layout.lettering import LETTERING_FONT
+    images = FakeImages(colours('red'))
+    vision = FakeVision(lambda p, i: {'lines': [{'mouth': [500, 500], 'bubble': [500, 500]}], 'protected': [[0, 0, 1000, 1000]]})
+    r = renderer(images, vision, font_path=str(LETTERING_FONT))
+    r.cast = {**r.cast, 'language': language}
+    original = Image.new('RGB', (1837, 944), 'red')
+    panel = {'caption': caption, 'dialogue': [{'speaker': 'Dana', 'text': dialogue}], 'note': 'With love'}
+    with pytest.raises(ValueError, match='comic_lettering_no_space'):
+        r._letter(original, panel)
+    assert len(vision.prompts) == 1 and len(images.calls) == 0  # never publish a shrunken inset over crowded art
+
+
+@pytest.mark.parametrize('attribute, expected, observed', [('pose','standing','kneeling'),('state','closed','open'),('state','flat','upright'),('hand','right','left'),('hand','right','ambiguous'),('framing','hand_detail_only','body_visible')])
+def test_literal_state_mismatch_cannot_pass_even_if_model_sets_matches_true(attribute, expected, observed):
+    from book_comic.art_check import require_checked
+    requirements = [{'subject':'Hero' if attribute == 'pose' else 'book', 'attribute':attribute, 'expected':expected}]
+    answer = {'has_text':False,'bad_anatomy':False, 'requirement_checks':[{'index':0,'observed':observed,'matches':True}]}
+    found = inspect_art(Image.new('RGB',(100,100)), FakeVision(lambda p,i:answer), requirements=requirements)
+    assert found['requirement_mismatch'] is True
+    assert require_checked(found) is False
+
+
+def test_missing_requirement_evidence_is_not_a_pass():
+    from book_comic.art_check import require_checked
+    answer = {'has_text':False,'bad_anatomy':False,'requirement_checks':[]}
+    found = inspect_art(Image.new('RGB',(100,100)), FakeVision(lambda p,i:answer),
+                        requirements=[{'subject':'book','attribute':'state','expected':'closed'}])
+    with pytest.raises(ValueError, match='comic_art_check_unavailable'):
+        require_checked(found)
+
+
+def test_canonical_prop_mismatch_is_rejected():
+    from book_comic.art_check import require_checked
+    answer = {'has_text':False,'bad_anatomy':False,'prop_checks':[{'name':'owl','visible':True,'observed':'turquoise disk','matches':False}]}
+    found = inspect_art(Image.new('RGB',(100,100)), FakeVision(lambda p,i:answer),
+                        props=[{'name':'owl','look':'brass owl with round dial'}], anchors={'owl':'cream clock face with a dark pointer'})
+    assert found['prop_mismatch'] is True and require_checked(found) is False
+
+
+def test_first_observed_prop_design_is_kept_in_existing_sheet_asset(tmp_path):
+    import json
+    description = 'small brass lantern with a clear glass chimney and black handle'
+    def answer(prompt, image):
+        return {'head_top':400,'has_text':False,'bad_anatomy':False,'identity_mismatch':False,'design_mismatch':False,'scene_mismatch':False,
+                'lines':[{'mouth':[700,600],'bubble':[200,120]}], 'protected':[],
+                'prop_checks':[{'name':'the brass lantern','visible':True,'observed':description,'matches':True}]}
+    sheet = tmp_path / 'sheet.png'
+    r = renderer(FakeImages(colours('red')), FakeVision(answer), check_art=True, sheet_path=sheet)
+    r.render_page([OLD_PANEL], tmp_path / 'page.png')
+    assert r.prop_anchors['the brass lantern'] == description
+    with Image.open(sheet) as image:
+        assert json.loads(image.info['comic_prop_anchors'])['the brass lantern'] == description
+    loaded = renderer(FakeImages(colours('blue')), sheet_path=sheet)
+    loaded.character_sheet()
+    assert loaded.prop_anchors == r.prop_anchors
+    assert r.audit and r.audit[-1]['accepted'] is True
+
+
+def test_explicit_hand_and_crop_survive_missing_model_requirements():
+    from book_comic.scene_requirements import scene_requirements
+    scene = "Close-up: Hero holds the key in the right hand. Only the right hand, teal sleeve and keyhole are in frame, no face."
+    requirements = scene_requirements(scene, [])
+    assert {r['attribute']: r['expected'] for r in requirements} == {'hand': 'right', 'framing': 'hand_detail_only'}
+    assert scene_requirements("Medium shot: Hero raises both hands.", []) == []
+    assert scene_requirements("Only Hero's face and right hand are visible.", []) == [{'subject':'Hero', 'attribute':'hand', 'expected':'right'}]
+
+
+def test_direct_panel_prompt_preserves_explicit_crop_without_preflight():
+    from book_comic.image_prompts import panel_prompt
+    scene = "Only the left hand and sleeve are visible."
+    prompt = panel_prompt(CAST, {'scene': scene}, 'Dana')
+    assert prompt.startswith('LIMB-ONLY MACRO DETAIL')
+    assert "anatomical left hand" in prompt
+    assert "Exclude head, neck, shoulders, torso" in prompt
+
+
+@pytest.mark.parametrize('scene', ['Hand-only close-up of the right hand holding a compass.', 'Close-up showing only Hero\'s right hand.', 'Only the right hand and sleeve are visible.', 'Only the right hand and socket are in frame.'])
+def test_limb_only_crop_wording_is_preserved(scene):
+    from book_comic.scene_requirements import scene_requirements
+    assert {'subject':'frame', 'attribute':'framing', 'expected':'hand_detail_only'} in scene_requirements(scene)
+
+
+@pytest.mark.parametrize('shape, rejected', [('triangular_prism',False),('other',True),('uncertain',True)])
+def test_prism_shape_is_checked_independently_of_matches(shape, rejected):
+    from book_comic.art_check import require_checked
+    answer = {'has_text':False,'bad_anatomy':False,'prop_checks':[{'name':'Blue Prism','visible':True,'observed':'a blue crystal','observed_shape':shape,'matches':True}]}
+    found = inspect_art(Image.new('RGB',(100,100)), FakeVision(lambda p,i:answer), props=[{'name':'Blue Prism','look':'a triangular optical prism'}])
+    assert found['prop_shape_mismatch'] is rejected
+    assert require_checked(found) is (not rejected)
+
+
+def test_missing_visible_prism_shape_evidence_is_not_a_pass():
+    from book_comic.art_check import require_checked
+    answer = {'has_text':False,'bad_anatomy':False,'prop_checks':[{'name':'Blue Prism','visible':True,'observed':'a blue crystal','matches':True}]}
+    found = inspect_art(Image.new('RGB',(100,100)), FakeVision(lambda p,i:answer), props=[{'name':'Blue Prism','look':'a triangular optical prism'}])
+    with pytest.raises(ValueError, match='comic_art_check_unavailable'):
+        require_checked(found)

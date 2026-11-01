@@ -37,12 +37,12 @@ def test_the_cover_reference_shows_all_page_panels_in_order():
 
 @pytest.mark.parametrize("names, calls, colour, at_bottom", [
     (["clean"], 1, None, False),
-    (["seamed", "clean"], 2, None, False),
-    (["seamed", "seamed"], 2, None, False),  # both seamed: the seam is cut off
-    (["high", "low"], 2, "red", False),
-    (["high", "high"], 2, "blue", True),  # both too high: never fails the job, the title moves to the bottom
+    (["seamed", "clean"], 1, None, False),
+    (["seamed", "seamed"], 1, None, False),  # both seamed: the seam is cut off
+    (["high", "low"], 1, "blue", True),
+    (["high", "high"], 1, "blue", True),  # both too high: never fails the job, the title moves to the bottom
     (["low"], 1, "red", False),
-    (["seamed", "high"], 2, "blue", True),
+    (["seamed", "high"], 1, None, False),
     (["texted", "low"], 2, "red", False),
     (["texted", "high"], 2, "blue", True),
     (["handed", "low"], 2, "red", False),  # a third hand: drawn once more, the sound art kept
@@ -57,7 +57,7 @@ def test_cover_redraws_once_and_keeps_the_better_art(tmp_path, noise, monkeypatc
     def inspect(prompt, art):
         pixel = art.getpixel((0, 0))
         return {"head_top": heads.get(pixel, 0.5) * 1000, "has_text": pixel == (0, 128, 0),
-                "bad_anatomy": pixel == (255, 255, 0)}
+                "bad_anatomy": pixel == (255, 255, 0), "identity_mismatch": False, "design_mismatch": False, "scene_mismatch": False}
 
     lettered, bottoms = [], []
     monkeypatch.setattr(cover_module, "letter_cover",
@@ -109,3 +109,14 @@ def test_cover_title_always_fits_one_line():
     title = "המצאת יום ההולדת הגדולה של סבא"
     assert one_line_font(TITLE_FONT, title, 400, 1800).getlength(title) <= 1800
     assert one_line_font(TITLE_FONT, "קצר", 150, 1800).size == 150
+
+
+def test_rejected_and_unchecked_covers_never_publish(tmp_path):
+    for answer, code, calls in [({}, 'comic_art_check_unavailable', 1),
+                                 ({'head_top': 400, 'has_text': True, 'bad_anatomy': False, 'identity_mismatch': False, 'design_mismatch': False, 'scene_mismatch': False}, 'comic_cover_rejected', 2)]:
+        path = tmp_path / 'cover.png'
+        images = FakeImages([Image.new('RGB', (400, 600), 'blue')])
+        with pytest.raises(ValueError, match=code):
+            render_cover(CAST, COVER, (400, 600), path, images, FakeVision(lambda p, i: answer))
+        assert len(images.calls) == calls
+        assert not path.exists()
