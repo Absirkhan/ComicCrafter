@@ -4,6 +4,7 @@ from io import BytesIO
 from typing import Callable, List, Optional
 
 import pytest
+import json
 from PIL import Image
 
 
@@ -44,7 +45,12 @@ class FakeVision:
 
     def ask_json(self, prompt, image, timeout=60):
         self.prompts.append(prompt)
-        return self.answer(prompt, image)
+        answer = self.answer(prompt, image[0] if isinstance(image, list) else image)
+        if isinstance(answer, dict) and "Verification data: " in prompt:
+            data, _ = json.JSONDecoder().raw_decode(prompt.split("Verification data: ", 1)[1])
+            answer.setdefault("requirement_checks", [{"index": i, "observed": r["expected"], "matches": True} for i, r in enumerate(data["requirements"])])
+            answer.setdefault("prop_checks", [{"name": p["name"], "visible": False, "observed": "", "matches": True} for p in data["props"]])
+        return answer
 
 
 @pytest.fixture

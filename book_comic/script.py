@@ -45,7 +45,7 @@ Return JSON:
 }}
 Include every character who speaks or appears in more than one chapter (at most 10). Base looks on the
 book's descriptions; invent consistent details where the book is silent. List at most 4 props: objects
-that matter in more than one chapter; a prop never changes how it looks.
+that matter in more than one chapter; retain its identifying design while allowing story-driven changes of pose, position or state.
 
 Novel:
 {book}"""
@@ -62,7 +62,7 @@ Return JSON:
     {{
       "scene": "English instructions for the illustrator, 40-70 words, starting with exactly one shot label
                 and a colon ({shots}), then who is in the shot (use name_en), what they are doing, their
-                expressions, setting and lighting. Compose the shot
+                expression when visible (otherwise gesture or posture), setting and lighting. Compose the shot
                 with open sky or plain background in the upper part of the frame. Never mention text,
                 speech bubbles, boxes or empty space.",
       "characters": ["name_en of each character visible"],

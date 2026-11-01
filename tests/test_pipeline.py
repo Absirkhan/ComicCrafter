@@ -25,7 +25,7 @@ def run(tmp_path, monkeypatch, cast, first, last, **kwargs):
     chapters = [Chapter(n, f"T{n}", "text") for n in (1, 2, 3)]
     monkeypatch.setattr(pipeline, "extract_chapters", lambda path: chapters)
     images = FakeImages([Image.new("RGB", (64, 96), "white")])
-    vision = FakeVision(lambda p, i: {"head_top": 400, "has_text": False} if "head_top" in p else [{"bubble": [500, 200]}])
+    vision = FakeVision(lambda p, i: {"head_top": 400, "has_text": False, "bad_anatomy": False, "identity_mismatch": False, "design_mismatch": False, "scene_mismatch": False} if "head_top" in p else {"lines": [{"bubble": [500, 200]}], "protected": []})
     result = pipeline.generate_book_comic(tmp_path / "book.pdf", tmp_path / "out", first, last,
                                           writer=FakeWriter(cast), images=images, vision=vision, **kwargs)
     return result, images

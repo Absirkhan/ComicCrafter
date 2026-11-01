@@ -1,6 +1,7 @@
 """Fonts, colours and text measuring shared by bubbles, captions and covers."""
 
 import re
+from functools import lru_cache
 from pathlib import Path
 from typing import Optional, Tuple
 
@@ -70,6 +71,30 @@ def _wrap(draw: ImageDraw.ImageDraw, text: str, font, max_width: int) -> str:
             current = trial
     if current:
         lines.append(current)
+    # Keep the greedy line count, but balance all lines so a short word is not stranded.
+    words = text.split()
+
+    @lru_cache(None)
+    def balanced(start, count):
+        if count == 0:
+            return (0, ()) if start == len(words) else None
+        best = None
+        for end in range(start + 1, len(words) - count + 2):
+            line = " ".join(words[start:end])
+            width = draw.textlength(line, font=font)
+            if width > max_width:
+                break
+            rest = balanced(end, count - 1)
+            if rest is not None:
+                candidate = ((max_width - width) ** 2 + rest[0], (line,) + rest[1])
+                if best is None or candidate[0] < best[0]:
+                    best = candidate
+        return best
+
+    if len(lines) > 1:
+        result = balanced(0, len(lines))
+        if result is not None:
+            lines = result[1]
     return "\n".join(lines)
 
 

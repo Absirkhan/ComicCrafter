@@ -59,3 +59,44 @@ def test_the_image_client_sends_reference_images_and_records_cost():
         assert post.call_args.kwargs["json"]["messages"][0]["content"] == "plain scene"
     assert client.usage == [{"model": "test-model", "cost": 0.02}] * 2
     assert round(client.total_cost, 4) == 0.04
+
+
+def test_protected_subjects_are_returned_by_the_existing_vision_call():
+    answer = {'lines': [{'mouth': [700, 500], 'bubble': [200, 100]}],
+              'protected': [[600, 200, 200, 300], [100, 100, -1, 50], ['invalid']]}
+    vision = FakeVision(lambda p, i: answer)
+    plan = plan_bubbles(ART, LINES[:1], False, vision=vision)
+    assert plan.protected == [(0.6, 0.2, 0.2, 0.3)]
+    assert len(vision.prompts) == 1
+    assert 'including companions' in vision.prompts[0]
+
+
+def test_review_client_supports_text_only_and_reference_comparisons():
+    from generation.vision_client import VisionClient
+    client = VisionClient(api_key='test-only')
+    body = {'usage': {'cost': .001}, 'choices': [{'message': {'content': '{"ok":true}'}}]}
+    with patch('generation.vision_client.requests.post') as post:
+        post.return_value.json.return_value = body
+        client.ask_json('Review story', None)
+        content = post.call_args.kwargs['json']['messages'][0]['content']
+        assert [p['type'] for p in content] == ['text']
+        client.ask_json('Compare references', [ART, 'data:sheet'])
+        content = post.call_args.kwargs['json']['messages'][0]['content']
+        assert [p['type'] for p in content] == ['text', 'image_url', 'image_url']
+        assert content[-1]['image_url']['url'] == 'data:sheet'
+    assert len(client.usage) == 2
+
+
+def test_art_review_uses_stronger_model_and_meters_it(monkeypatch):
+    from generation.vision_client import VisionClient, ART_REVIEW_MODEL, DEFAULT_MODEL
+    monkeypatch.delenv("OPENROUTER_VISION_MODEL", raising=False)
+    client = VisionClient(api_key="test-only")
+    body = {"usage": {"cost": .002}, "choices": [{"message": {"content": '{"ok":true}'}}]}
+    with patch("generation.vision_client.requests.post") as post:
+        post.return_value.json.return_value = body
+        client.ask_art_json("Inspect action", ART)
+        assert post.call_args.kwargs["json"]["model"] == ART_REVIEW_MODEL
+        assert client.usage == [{"model": ART_REVIEW_MODEL, "cost": .002}]
+        client.ask_json("Review story")
+        assert post.call_args.kwargs["json"]["model"] == DEFAULT_MODEL
+    assert VisionClient(api_key="test-only", model="explicit").art_model == "explicit"

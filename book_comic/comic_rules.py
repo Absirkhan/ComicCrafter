@@ -5,6 +5,8 @@ painted into the art by art_check.inspect_art, reading order and gutters by the 
 The rest (180-degree rule, action lines, contrast, colour mood) are prompt rules.
 """
 
+import re
+
 from typing import Dict, List, Optional, Sequence
 
 COMIC_SHOTS = ("Extreme long shot", "Wide shot", "Medium shot", "Close-up")
@@ -39,22 +41,31 @@ ANATOMY_RULE = (
 PANEL_RULES = (
     "Comic craft rules. "
     "Camera: draw exactly the shot named at the start of the scene (extreme long, wide, medium or close-up). "
-    "180-degree rule: keep the camera on the same side of the action as the previous panel and keep each "
-    "character's direction of travel, unless the scene says they turn around. "
-    "Action lines: for fast motion, a jump or an impact, add dynamic action lines along the direction of movement; "
-    "none for still moments. "
-    "Contrast and focus: draw the main characters and the foreground with bolder outlines and the strongest contrast; "
-    "the background with thinner lines, fewer details and lower contrast. "
-    "Colour mood: let the palette carry the moment: cool blues for sadness, calm or cold; warm reds and oranges for "
-    "danger, anger or excitement; soft warm light for joy and comfort. In black-and-white styles, build depth with "
-    "hatching and a clear light side and shadow side. "
+    "180-degree rule: within a continuous action in the same location, keep the camera on the same side of the action and keep "
+    "direction of travel, unless the scene specifies a turn or a new location. "
+    "Action lines: use motion cues appropriate to the selected medium along the stated direction of movement. "
+    "In ink comics these may be action lines; do not impose drawn streaks on clay or paper-cutout art. "
+    "No motion cues for still moments. "
+    "Contrast and focus: use the selected medium to make the main action and foreground distinct from the background. "
+    "The selected art style controls rendering: do not add ink outlines, hatching or flat shading to a clay, "
+    "paper-cutout or painterly style. "
+    "Colour mood: use lighting and value relationships within the selected style's palette. A monochrome style "
+    "stays monochrome; do not add colours just to signal an emotion. "
     "Consistency: each character's hairstyle, outfit and accessories are identical in every panel, recognisable from "
-    "any angle or distance; never remove or add a coat, jacket or accessory. "
+    "any angle or distance. Keep costume construction fixed; an established handheld accessory may be held, "
+    "worn or put down when the approved scene explicitly changes its position. "
 )
 NO_TEXT_RULE = (
     "Absolutely no writing anywhere in the image: no letters, words, captions, labels, signs, speech "
-    "bubbles or boxes with text. Objects that usually carry writing appear blank."
+    "bubbles, empty caption boxes or sound-effect lettering. Objects that usually carry writing have plain surfaces, "
+    "not garbled glyphs. Instrument faces use geometric ticks and pointers only: no cardinal letters, digits or invented glyphs. Do not draw an empty white rectangle as a placeholder for later lettering."
 )
+
+
+def prop_shape(prop):
+    """A stated triangular prism must not silently become an ornamental crystal rod."""
+    look = prop.get('look', '').lower()
+    return 'triangular_prism' if re.search(r'\btriangular\b', look) and re.search(r'\bprism\b', look) else None
 
 
 def props_rule(cast: Dict) -> str:
@@ -63,9 +74,12 @@ def props_rule(cast: Dict) -> str:
     if not props:
         return ""
     listed = "; ".join(f"{p['name']}: {p['look']}" for p in props)
+    geometry = " ".join(f"{p['name']} is a triangular optical wedge: two triangular end faces joined by three long faces, not a hexagonal crystal rod or pointed obelisk. Bevels do not change its triangular cross-section." for p in props if prop_shape(p))
     return (
-        "Recurring props, drawn exactly as described every time they appear "
-        f"(same shape, colour, material and size): {listed}. "
+        geometry + " Recurring props, drawn exactly as described every time they appear "
+        f"(fixed identifying geometry, base colour, material and scale): {listed}. "
+        "Allow approved changes of pose, position, opening, glow, lighting or damage while preserving the object's identity. "
+        "Translate base colours into the selected style's palette; use identifying value contrast in monochrome. "
     )
 
 

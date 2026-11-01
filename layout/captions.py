@@ -7,8 +7,8 @@ from PIL import Image, ImageDraw
 from layout.lettering import CAPTION_FILL, INK, Rect, _font, _wrap, is_rtl, overlap_area
 
 CORNERS = ("top-left", "top-right", "bottom-left", "bottom-right")
-CAPTION_WIDTH = 0.4  # wrap width as a share of the panel; narrower turns two sentences into a tall column
-CAPTION_SIZE = 0.032  # font size as a share of the panel height
+CAPTION_WIDTH = 0.46  # wrap width as a share of the panel; narrower turns two sentences into a tall column
+CAPTION_SIZE = 0.045  # font size as a share of the panel height
 NOTE_SIZE = 0.035
 
 
@@ -32,6 +32,8 @@ def text_box(
     margin = max(8, h // 40)
     x0 = margin if corner.endswith("left") else w - bw - margin
     y0 = margin if corner.startswith("top") else h - bh - margin
+    if x0 < 0 or y0 < 0 or x0 + bw > w or y0 + bh > h:
+        raise ValueError("comic_lettering_overflow")
     if not dry:
         draw.rectangle([x0, y0, x0 + bw, y0 + bh], fill=CAPTION_FILL, outline=INK, width=max(2, h // 300))
         draw.multiline_text((x0 + pad - left, y0 + pad - top), wrapped, font=font, fill=INK, align=align)
@@ -72,6 +74,9 @@ def place_caption(
     corner = min(corners, key=lambda c: sum(
         overlap_area(text_box(draw, image.size, text, font_size, c, font_path, dry=True), head) for head in heads
     ))
+    candidate = text_box(draw, image.size, text, font_size, corner, font_path, dry=True)
+    if any(overlap_area(candidate, head) for head in heads):
+        raise ValueError("comic_lettering_no_space")
     box = draw_caption(image, text, corner, placed, font_path)
     if corner != ("top-right" if rtl else "top-left"):
         placed.append((0, 0, w, box[1] + box[3]))
