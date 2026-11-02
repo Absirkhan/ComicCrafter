@@ -41,8 +41,9 @@ def _explicit_requirements(scene, requirements):
     """Model extraction cannot invent literal pose/state constraints absent from approved text."""
     stated = {'standing': r'\b(?:stands?|standing)\b', 'seated': r'\b(?:sits?|sitting|seated)\b',
               'kneeling': r'\b(?:kneels?|kneeling)\b', 'crouching': r'\b(?:crouches|crouching|crouch)\b',
-              'upright': r'\bupright\b', 'flat': r'\bflat\b', 'open': r'\b(?:open|opened)\b',
-              'closed': r'\b(?:closed|shut)\b'}
+              'upright': r'\b(?:upright|vertical|vertically)\b', 'flat': r'\b(?:flat|horizontal|horizontally)\b',
+              'open': r'\b(?:open|opens|opened|opening|unfolded)\b',
+              'closed': r'\b(?:close|closes|closed|closing|shut|shuts)\b'}
     return [r for r in requirements if r['attribute'] not in ('pose', 'state')
             or r['expected'].strip().lower() not in stated
             or re.search(stated[r['expected'].strip().lower()], scene, re.I)]

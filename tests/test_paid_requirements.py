@@ -1,4 +1,4 @@
-from book_comic.preflight import review_page
+from book_comic.preflight import review_page, _explicit_requirements
 from book_comic.image_prompts import panel_prompt
 from conftest import FakeVision
 from PIL import Image
@@ -25,6 +25,13 @@ def test_extreme_long_shot_establishes_scale_before_full_character_description()
                           {'scene': 'Extreme long shot: Hero watches the approaching storm.'}, 'Hero: teal blazer')
     assert prompt.startswith('EXTREME LONG SHOT:')
     assert 'one-sixth' in prompt
+
+
+@pytest.mark.parametrize('scene,state', [('Hero opens the Case.', 'open'), ('Hero shuts the lid.', 'closed'),
+                                        ('The Case is vertical.', 'upright'), ('The Case rests horizontally.', 'flat')])
+def test_explicit_state_synonyms_remain_required(scene, state):
+    required = [{'subject': 'Case', 'attribute': 'state', 'expected': state}]
+    assert _explicit_requirements(scene, required) == required
 
 
 @pytest.mark.parametrize('attribute,expected,observed,rejected', [
