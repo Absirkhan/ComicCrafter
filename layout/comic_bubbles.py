@@ -88,6 +88,7 @@ def draw_speech_bubble(
     placed: List[Tuple[int, int, int, int]],
     kind: str = "speech",
     font_path: Optional[str] = None,
+    wrap_share: Optional[float] = None,
 ) -> None:
     """Draw a bubble of the given kind near center with a tail toward the speaker.
 
@@ -109,7 +110,8 @@ def draw_speech_bubble(
     # Wrap to a roughly 3:1 text block so the oval stays round rather than flat
     line_height = draw.textbbox((0, 0), "Ag", font=font)[3]
     balanced = int(math.sqrt(draw.textlength(text, font=font) * line_height * 3))
-    wrapped = _wrap(draw, text, font, min(int(w * 0.32), max(balanced, int(w * 0.08))))
+    wrap_width = int(w * wrap_share) if wrap_share else min(int(w * 0.32), max(balanced, int(w * 0.08)))
+    wrapped = _wrap(draw, text, font, wrap_width)
     left, top, right, bottom = draw.multiline_textbbox((0, 0), wrapped, font=font, align="center")
     tw, th = right - left, bottom - top
     rx, ry = tw * 0.72 + 14, th * 0.78 + 12  # ellipse radii that enclose the text block
@@ -156,7 +158,7 @@ def draw_speech_bubble(
     draw.multiline_text(origin, wrapped, font=font, fill=colour, align="center")
 
 
-def render_dialogue(
+def _render_dialogue_once(
     image: Image.Image,
     dialogue: List[str],
     caption: str,
@@ -165,6 +167,8 @@ def render_dialogue(
     rtl: Optional[bool] = None,
     font_path: Optional[str] = None,
     reserved: Sequence[Rect] = (),
+    wrap_share: Optional[float] = None,
+    caption_width: float = 0.46,
 ) -> Image.Image:
     """Return a copy of the panel with its caption and bubbles drawn.
 
@@ -191,10 +195,25 @@ def render_dialogue(
         # and moves only when that corner would cover a speaker's head.
         reading_first = "top-right" if rtl else "top-left"
         other = "top-left" if rtl else "top-right"
-        place_caption(panel, caption, (reading_first, other), heads, placed, rtl, font_path)
+        place_caption(panel, caption, (reading_first, other), heads, placed, rtl, font_path, width_share=caption_width)
     kinds = list(kinds or []) + ["speech"] * (len(dialogue) - len(kinds or []))
     for text, center, speaker, kind in zip(dialogue, plan.bubbles, plan.speakers, kinds):
-        draw_speech_bubble(panel, text, center, speaker, placed, kind, font_path)
+        if wrap_share is None:
+            draw_speech_bubble(panel, text, center, speaker, placed, kind, font_path)
+        else:
+            draw_speech_bubble(panel, text, center, speaker, placed, kind, font_path, wrap_share=wrap_share)
 
     logger.debug(f"Drew {len(dialogue)} bubbles{' and a caption' if caption else ''}")
     return panel
+
+
+def render_dialogue(image, dialogue, caption, plan, kinds=None, rtl=None, font_path=None, reserved=()):
+    """Try alternative readable text shapes on fresh copies; never shrink or crop artwork."""
+    for wrap_share, caption_width in ((None, 0.46), (0.45, 0.65), (0.62, 0.88)):
+        try:
+            return _render_dialogue_once(image, dialogue, caption, plan, kinds, rtl, font_path,
+                                         reserved, wrap_share, caption_width)
+        except ValueError as error:
+            if str(error) not in ('comic_lettering_no_space', 'comic_lettering_overflow'):
+                raise
+    raise ValueError('comic_lettering_no_space')

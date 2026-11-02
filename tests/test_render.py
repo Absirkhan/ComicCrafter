@@ -225,7 +225,7 @@ def test_crowded_art_rejects_without_shrinking_or_another_image_call(language, c
     panel = {'caption': caption, 'dialogue': [{'speaker': 'Dana', 'text': dialogue}], 'note': 'With love'}
     with pytest.raises(ValueError, match='comic_lettering_no_space'):
         r._letter(original, panel)
-    assert len(vision.prompts) == 1 and len(images.calls) == 0  # never publish a shrunken inset over crowded art
+    assert len(vision.prompts) == 2 and len(images.calls) == 0  # one precise retry; never shrink or redraw artwork
 
 
 @pytest.mark.parametrize('attribute, expected, observed', [('pose','standing','kneeling'),('state','closed','open'),('state','flat','upright'),('hand','right','left'),('hand','right','ambiguous'),('framing','hand_detail_only','body_visible')])

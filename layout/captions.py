@@ -1,5 +1,6 @@
 """Narration captions and dedication notes: boxed text in a panel corner."""
 
+import math
 from typing import List, Optional, Sequence
 
 from PIL import Image, ImageDraw
@@ -20,18 +21,22 @@ def text_box(
     corner: str,
     font_path: Optional[str] = None,
     dry: bool = False,
+    position=None,
+    width_share: float = CAPTION_WIDTH,
 ) -> Rect:
     """Draw (or with dry=True only measure) one boxed text block in a corner; returns its rectangle."""
     w, h = size
     font = _font(font_size, text, font_path)
     pad = max(6, font_size // 3)
     align = "right" if is_rtl(text) else "left"
-    wrapped = _wrap(draw, text, font, int(w * CAPTION_WIDTH))
+    wrapped = _wrap(draw, text, font, int(w * width_share))
     left, top, right, bottom = draw.multiline_textbbox((0, 0), wrapped, font=font, align=align)
     bw, bh = right - left + 2 * pad, bottom - top + 2 * pad
     margin = max(8, h // 40)
     x0 = margin if corner.endswith("left") else w - bw - margin
     y0 = margin if corner.startswith("top") else h - bh - margin
+    if position is not None:
+        x0, y0 = position
     if x0 < 0 or y0 < 0 or x0 + bw > w or y0 + bh > h:
         raise ValueError("comic_lettering_overflow")
     if not dry:
@@ -41,11 +46,13 @@ def text_box(
 
 
 def draw_caption(
-    image: Image.Image, text: str, corner: str, placed: List[Rect], font_path: Optional[str] = None
+    image: Image.Image, text: str, corner: str, placed: List[Rect], font_path: Optional[str] = None,
+    position=None, width_share: float = CAPTION_WIDTH,
 ) -> Rect:
     """Draw a rectangular narration caption in a corner; its box is added to placed."""
     h = image.size[1]
-    box = text_box(ImageDraw.Draw(image), image.size, text, max(14, int(h * CAPTION_SIZE)), corner, font_path)
+    box = text_box(ImageDraw.Draw(image), image.size, text, max(14, int(h * CAPTION_SIZE)), corner, font_path,
+                   position=position, width_share=width_share)
     placed.append(box)
     return box
 
@@ -58,6 +65,7 @@ def place_caption(
     placed: List[Rect],
     rtl: bool,
     font_path: Optional[str] = None,
+    width_share: float = CAPTION_WIDTH,
 ) -> str:
     """Draw the caption in whichever of corners covers the least of the speakers' heads.
 
@@ -72,13 +80,29 @@ def place_caption(
     draw = ImageDraw.Draw(image)
     font_size = max(14, int(h * CAPTION_SIZE))
     corner = min(corners, key=lambda c: sum(
-        overlap_area(text_box(draw, image.size, text, font_size, c, font_path, dry=True), head) for head in heads
+        overlap_area(text_box(draw, image.size, text, font_size, c, font_path, dry=True, width_share=width_share), head) for head in heads
     ))
-    candidate = text_box(draw, image.size, text, font_size, corner, font_path, dry=True)
+    candidate = text_box(draw, image.size, text, font_size, corner, font_path, dry=True, width_share=width_share)
+    position = None
     if any(overlap_area(candidate, head) for head in heads):
-        raise ValueError("comic_lettering_no_space")
-    box = draw_caption(image, text, corner, placed, font_path)
-    if corner != ("top-right" if rtl else "top-left"):
+        # Two occupied corners do not mean the entire panel has no space. Search from
+        # top to bottom, preserving the reading side and all protected focal subjects.
+        bw, bh = (math.ceil(value) for value in candidate[2:])
+        margin = max(8, h // 40)
+        xs = list(range(margin, max(margin + 1, w - bw - margin + 1), max(4, w // 60)))
+        if rtl:
+            xs.reverse()
+        for y in range(margin, max(margin + 1, h - bh - margin + 1), max(4, h // 40)):
+            for x in xs:
+                if not any(overlap_area((x, y, bw, bh), head) for head in heads):
+                    position = (x, y)
+                    break
+            if position is not None:
+                break
+        if position is None:
+            raise ValueError("comic_lettering_no_space")
+    box = draw_caption(image, text, corner, placed, font_path, position=position, width_share=width_share)
+    if position is not None or corner != ("top-right" if rtl else "top-left"):
         placed.append((0, 0, w, box[1] + box[3]))
     return corner
 

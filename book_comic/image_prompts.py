@@ -6,7 +6,7 @@ None of the lettering (captions, dialogue, titles) is ever sent to the image mod
 from typing import Dict, Sequence
 
 from book_comic.scene_requirements import scene_requirements
-from book_comic.comic_rules import ANATOMY_RULE, NO_TEXT_RULE, PANEL_RULES, props_rule
+from book_comic.comic_rules import ANATOMY_RULE, NO_TEXT_RULE, PANEL_RULES, props_rule, scene_shot
 
 NO_TEXT = (
     "a single full-bleed illustration filling the whole canvas edge to edge: no border, no frame, "
@@ -63,6 +63,10 @@ def panel_prompt(cast: Dict, panel: Dict, people: str, roles: Sequence[str] = ()
     requirements = scene_requirements(panel['scene'], panel.get('requirements', []))
     framing = next((r['expected'] for r in requirements if r['attribute'] == 'framing'), None)
     crop = ""
+    if scene_shot(panel['scene']) == 'Extreme long shot':
+        crop = ("EXTREME LONG SHOT: establish the environment. Hero is a distant small figure, no more than "
+                "one-sixth of the image height; most of the canvas shows the landscape. Do not copy the full-body "
+                "scale of the photo or character sheet. Faces need not be readable at this distance.\n")
     if framing in ('hand_detail_only', 'feet_detail_only'):
         crop = ("LIMB-ONLY MACRO DETAIL. " + ("Crop at the wrist or short sleeve cuff; show only the specified hand, cuff and focal objects. " if framing == 'hand_detail_only' else "Crop at the lower legs; show only the specified feet and focal objects. ")
                 + "Head, neck, shoulders, torso, waist and all other limbs remain outside the frame. This crop overrides the full-body reference composition.\n")
