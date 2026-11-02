@@ -34,6 +34,28 @@ def test_explicit_state_synonyms_remain_required(scene, state):
     assert _explicit_requirements(scene, required) == required
 
 
+@pytest.mark.parametrize('scene,expected', [
+    ('A Sensor rests on the open Toolbox.', ['Toolbox']),
+    ('The Toolbox is open beside the Sensor.', ['Toolbox']),
+    ('Hero opens the Toolbox beside the Sensor.', ['Toolbox']),
+    ('The Sensor is open on the open Toolbox.', ['Sensor', 'Toolbox']),
+    ('The open Toolbox and Sensor rest on a table.', ['Sensor', 'Toolbox']),
+])
+def test_states_do_not_transfer_between_adjacent_objects(scene, expected):
+    requirements = [{'subject': name, 'attribute': 'state', 'expected': 'open'} for name in ['Sensor', 'Toolbox']]
+    result = _explicit_requirements(scene, requirements, ['Sensor', 'Toolbox'])
+    assert [r['subject'] for r in result] == expected
+
+
+def test_lettered_panel_reserves_natural_background_without_sending_its_words():
+    prompt = panel_prompt({'characters': [], 'style': 'ink'},
+                          {'scene': 'Close-up: Hero checks a device.', 'caption': 'PRIVATE_CAPTION',
+                           'dialogue': [{'text': 'PRIVATE_DIALOGUE'}]}, 'Hero: teal blazer')
+    assert 'upper third clear of faces' in prompt
+    assert 'continuous natural scenery' in prompt
+    assert 'PRIVATE_CAPTION' not in prompt and 'PRIVATE_DIALOGUE' not in prompt
+
+
 @pytest.mark.parametrize('attribute,expected,observed,rejected', [
     ('design', 'brass trim', 'not_visible', False),
     ('state', 'closed', 'open', True),
