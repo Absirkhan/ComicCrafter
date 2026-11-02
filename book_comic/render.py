@@ -17,7 +17,7 @@ from book_comic.art_check import ArtCheckError, draw_checked, request_art
 from book_comic.image_prompts import NO_TEXT, panel_prompt, sheet_prompt  # noqa: F401  (NO_TEXT re-exported)
 from generation.openrouter_image_client import OpenRouterImageClient, closest_aspect_ratio
 from generation.vision_client import VisionClient
-from layout.bubble_planner import default_plan, plan_bubbles
+from layout.bubble_planner import plan_bubbles
 from layout.captions import NOTE_SIZE, draw_note, note_corner, text_box
 from layout.comic_bubbles import head_box, is_rtl, render_dialogue
 from layout.lettering import overlap_area
@@ -91,6 +91,7 @@ class PageRenderer:
         self.current_stage = "unknown"
         self.current_panel = None
         self._diagnostic_start = 0
+        self.lettering_checks = set()
 
     def failure_diagnostic(self, cover=False):
         """Only fixed identifiers and scalar fields may leave private attempt diagnostics."""
@@ -101,9 +102,13 @@ class PageRenderer:
         if cover and report.get("kind") != "cover":
             report = {}
         checks = report.get("checks", {}) if stage in ("sheet", "panel", "cover") else {}
+        failed = [key for key in flags if checks.get(key) is True]
+        unchecked = [key for key in flags if key in checks and checks[key] is None]
+        if stage == 'lettering':
+            failed += [key for key in ('lettering_space', 'lettering_overflow') if key in self.lettering_checks]
+            unchecked += ['lettering_plan'] if 'lettering_plan' in self.lettering_checks else []
         return {"stage": stage, "panel": self.current_panel if stage in ("panel", "lettering") else None,
-                "failedChecks": [key for key in flags if checks.get(key) is True],
-                "uncheckedChecks": [key for key in flags if key in checks and checks[key] is None]}
+                "failedChecks": failed, "uncheckedChecks": unchecked}
 
     @property
     def total_cost(self) -> float:
@@ -186,6 +191,7 @@ class PageRenderer:
             return Image.new("RGB", size, (200, 200, 200))
 
     def _letter(self, image: Image.Image, panel: Dict) -> Image.Image:
+        self.lettering_checks = set()
         dialogue = [d for d in panel.get("dialogue", []) if d.get("text")]
         caption = panel.get("caption", "")
         note = panel.get("note", "")
@@ -200,32 +206,31 @@ class PageRenderer:
             f"{c['name_en']} ({c['look'][:160]})" for c in (self._character(d.get("speaker", "")) for d in dialogue)
         ]
         reserved = [note_corner(rtl)] if note else []
-        plan = None
-        if texts:
-            plan = plan_bubbles(
-                image, list(zip(speakers, texts)), bool(caption), rtl, vision=self.vision, reserved_corners=reserved
-            )
-        reliable_plan = plan is not None and plan.protected_checked
-        plan = plan or default_plan(len(texts))
         font = self.options.font_path
-        try:
-            if not reliable_plan:
-                raise ValueError("comic_lettering_no_space")
-            reserved = []
-            if note:
-                box = text_box(ImageDraw.Draw(image), image.size, note, max(14, int(image.height * NOTE_SIZE)),
-                               note_corner(rtl), font, dry=True)
-                subjects = [(int(x * image.width), int(y * image.height), int(w * image.width), int(h * image.height))
-                            for x, y, w, h in plan.protected]
-                subjects += [head_box(p, image.size) for p in plan.speakers if p]
-                if any(overlap_area(box, subject) for subject in subjects):
-                    raise ValueError("comic_lettering_no_space")
-                reserved.append(box)
-            lettered = render_dialogue(image, texts, caption, plan, kinds=kinds, rtl=rtl, font_path=font, reserved=reserved)
-            return draw_note(lettered, note, rtl=rtl, font_path=font)
-        except ValueError as error:
-            if str(error) not in ("comic_lettering_no_space", "comic_lettering_overflow"):
-                raise
+        for precise in (False, True):
+            plan = plan_bubbles(image, list(zip(speakers, texts)), bool(caption), rtl,
+                                vision=self.vision, reserved_corners=reserved, precise=precise)
+            if plan is None or not plan.protected_checked:
+                self.lettering_checks.add('lettering_plan')
+                continue
+            try:
+                reserved_boxes = []
+                if note:
+                    box = text_box(ImageDraw.Draw(image), image.size, note, max(14, int(image.height * NOTE_SIZE)),
+                                   note_corner(rtl), font, dry=True)
+                    subjects = [(int(x * image.width), int(y * image.height), int(w * image.width), int(h * image.height))
+                                for x, y, w, h in plan.protected]
+                    subjects += [head_box(p, image.size) for p in plan.speakers if p]
+                    if any(overlap_area(box, subject) for subject in subjects):
+                        raise ValueError("comic_lettering_no_space")
+                    reserved_boxes.append(box)
+                lettered = render_dialogue(image, texts, caption, plan, kinds=kinds, rtl=rtl,
+                                           font_path=font, reserved=reserved_boxes)
+                return draw_note(lettered, note, rtl=rtl, font_path=font)
+            except ValueError as error:
+                if str(error) not in ("comic_lettering_no_space", "comic_lettering_overflow"):
+                    raise
+                self.lettering_checks.add('lettering_overflow' if str(error) == 'comic_lettering_overflow' else 'lettering_space')
         raise ValueError("comic_lettering_no_space")
 
     def render_page(self, panels: List[Dict], path: Path) -> Path:

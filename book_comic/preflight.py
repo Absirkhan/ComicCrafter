@@ -19,7 +19,9 @@ crouching, open, closed, flat, upright. Use "contact", "direction" or "design" f
 English expected facts. Subjects use Hero or the exact name of an established prop. Include explicit closed/open,
 standing/kneeling and flat/upright instructions even when narration doesn't mention them. Never relax these to make
 an easier image. Only extract facts explicitly stated in that scene; do not infer unseen posture or action. In a hands/feet detail shot, do not add a Hero pose requirement such as standing unless explicitly requested, and do not require a face. If approved inputs contradict one another, return
-false for the affected check instead of changing the scene. cover_requirements is empty when there is no cover.'''
+false for the affected check instead of changing the scene. A resting case has no specified upright/flat state.
+Do not turn a plausible default into a requirement. An empty requirements list is correct when no explicit visible
+acceptance condition is stated. cover_requirements is empty when there is no cover.'''
 
 
 def _requirements(value):
@@ -33,6 +35,17 @@ def _requirements(value):
         if not all(isinstance(r[k], str) and 0 < len(r[k]) <= 180 for k in ('subject', 'expected')):
             raise ValueError('comic_preflight_invalid')
     return value
+
+
+def _explicit_requirements(scene, requirements):
+    """Model extraction cannot invent literal pose/state constraints absent from approved text."""
+    stated = {'standing': r'\b(?:stands?|standing)\b', 'seated': r'\b(?:sits?|sitting|seated)\b',
+              'kneeling': r'\b(?:kneels?|kneeling)\b', 'crouching': r'\b(?:crouches|crouching|crouch)\b',
+              'upright': r'\bupright\b', 'flat': r'\bflat\b', 'open': r'\b(?:open|opened)\b',
+              'closed': r'\b(?:closed|shut)\b'}
+    return [r for r in requirements if r['attribute'] not in ('pose', 'state')
+            or r['expected'].strip().lower() not in stated
+            or re.search(stated[r['expected'].strip().lower()], scene, re.I)]
 
 
 def review_page(script, vision, include_cover=True, private_names=()):
@@ -68,11 +81,9 @@ def review_page(script, vision, include_cover=True, private_names=()):
     panels = answer.get('panels')
     if not isinstance(panels, list) or len(panels) != len(script['panels']):
         raise ValueError('comic_preflight_invalid')
-    requirements = [_requirements(p.get('requirements')) if isinstance(p, dict) else _requirements(None) for p in panels]
-    if any(not r for r in requirements):
-        raise ValueError('comic_preflight_invalid')
+    requirements = [_explicit_requirements(scene['scene'], _requirements(p.get('requirements')))
+                    if isinstance(p, dict) else _requirements(None) for scene, p in zip(script['panels'], panels)]
     cover_requirements = _requirements(answer.get('cover_requirements'))
-    if include_cover and not cover_requirements:
-        raise ValueError('comic_preflight_invalid')
+    cover_requirements = _explicit_requirements(script['cover']['scene'], cover_requirements)
     return {**script, 'panels': [{**p, 'requirements': scene_requirements(p['scene'], r)} for p, r in zip(script['panels'], requirements)],
             'cover': {**script['cover'], 'requirements': scene_requirements(script['cover']['scene'], cover_requirements)}}

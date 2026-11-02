@@ -70,6 +70,7 @@ def plan_bubbles(
     rtl: bool = False,
     vision: Optional[VisionClient] = None,
     reserved_corners: Sequence[str] = (),
+    precise: bool = False,
 ) -> Optional[BubblePlan]:
     """Ask a vision model where each speaker is and where their bubble fits.
 
@@ -86,7 +87,13 @@ def plan_bubbles(
     """
     vision = vision or VisionClient()
     try:
-        data = vision.ask_json(_prompt(lines, has_caption, rtl, reserved_corners), image)
+        prompt = _prompt(lines, has_caption, rtl, reserved_corners)
+        if precise:
+            prompt += ('\nA first layout could not fit. Recheck tight rectangles around actual faces and focal '
+                       'hands/props; do not mark whole bodies or empty background as protected. '
+                       'An off-panel speaker has mouth:null. Inspect the whole panel for usable empty space.')
+        ask = getattr(vision, 'ask_art_json', vision.ask_json) if precise else vision.ask_json
+        data = ask(prompt, image)
         if isinstance(data, list):
             data = {"lines": data}
 
