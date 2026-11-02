@@ -71,6 +71,11 @@ def panel_prompt(cast: Dict, panel: Dict, people: str, roles: Sequence[str] = ()
         crop = ("LIMB-ONLY MACRO DETAIL. " + ("Crop at the wrist or short sleeve cuff; show only the specified hand, cuff and focal objects. " if framing == 'hand_detail_only' else "Crop at the lower legs; show only the specified feet and focal objects. ")
                 + "Head, neck, shoulders, torso, waist and all other limbs remain outside the frame. This crop overrides the full-body reference composition.\n")
         people = "Only the specified limb is visible. Preserve its skin, age and relevant clothing details from references; do not draw the whole character."
+    lettering_space = ""
+    if panel.get('caption') or any(d.get('text') for d in panel.get('dialogue', [])):
+        lettering_space = ("Stage the focal action below the upper third of the canvas. Keep that upper third clear of faces, "
+                           "important hands and focal props for later lettering; fill it with continuous natural scenery such as "
+                           "sky, haze or a wall. This is one full-bleed illustration, never a blank strip, inset, seam or text box.\n")
     previous = ""
     if "previous" in roles:
         previous = (
@@ -79,12 +84,11 @@ def panel_prompt(cast: Dict, panel: Dict, people: str, roles: Sequence[str] = ()
             "Preserve world continuity while changing the pose and framing to match this scene. "
         )
     return (
-        f"{crop}Comic book panel. Art style: {cast.get('style', 'detailed comic book art')}.\n"
+        f"{crop}{lettering_space}Comic book panel. Art style: {cast.get('style', 'detailed comic book art')}.\n"
         f"Scene: {panel['scene']}\n"
         f"Characters (draw exactly as described): {people or 'none'}\n"
         f"{describe_references(roles)}{previous}{PANEL_CRAFT}{PANEL_RULES}{props_rule(cast)}"
         f"{acceptance_prompt(requirements, cast.get('prop_anchors'))}"
-        "Leave some natural background around the focal action for readable lettering. "
         "Keep the requested shot distance and all focal action visible. "
         "Use real scenery, never an empty rectangle.\n"
         f"Strictly {NO_TEXT}. {NO_TEXT_RULE}"

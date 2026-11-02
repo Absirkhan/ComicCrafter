@@ -21,7 +21,8 @@ standing/kneeling and flat/upright instructions even when narration doesn't ment
 an easier image. Only extract facts explicitly stated in that scene; do not infer unseen posture or action. In a hands/feet detail shot, do not add a Hero pose requirement such as standing unless explicitly requested, and do not require a face. If approved inputs contradict one another, return
 false for the affected check instead of changing the scene. A resting case has no specified upright/flat state.
 Do not turn a plausible default into a requirement. An empty requirements list is correct when no explicit visible
-acceptance condition is stated. cover_requirements is empty when there is no cover.'''
+acceptance condition is stated. Bind each state to the noun it modifies: an instrument on an open toolbox
+does not make the instrument open. cover_requirements is empty when there is no cover.'''
 
 
 def _requirements(value):
@@ -37,16 +38,46 @@ def _requirements(value):
     return value
 
 
-def _explicit_requirements(scene, requirements):
+def _state_owner(scene, match, subjects):
+    """Recognize only unambiguous adjacent names; uncertain wording keeps the check."""
+    after = re.sub(r'^(?:the|a|an)\s+', '', scene[match.end():].lstrip(), flags=re.I)
+    before = scene[:match.start()]
+    for name in subjects:
+        adjacent = re.match(re.escape(name) + r'\b', after, re.I)
+        if adjacent:
+            if re.match(r'\s*(?:and|or)\b', after[adjacent.end():], re.I):
+                return None  # coordinated nouns can share the state
+            return name
+    for name in subjects:
+        if re.search(r'\b' + re.escape(name) + r'\s+(?:(?:is|are|remains|stays|lies|rests)\s+)?'
+                     r'(?:(?:now|fully|partly|partially|completely|still)\s+)*$', before, re.I):
+            return name
+    return None
+
+
+def _explicit_requirements(scene, requirements, subjects=()):
     """Model extraction cannot invent literal pose/state constraints absent from approved text."""
     stated = {'standing': r'\b(?:stands?|standing)\b', 'seated': r'\b(?:sits?|sitting|seated)\b',
               'kneeling': r'\b(?:kneels?|kneeling)\b', 'crouching': r'\b(?:crouches|crouching|crouch)\b',
               'upright': r'\b(?:upright|vertical|vertically)\b', 'flat': r'\b(?:flat|horizontal|horizontally)\b',
               'open': r'\b(?:open|opens|opened|opening|unfolded)\b',
               'closed': r'\b(?:close|closes|closed|closing|shut|shuts)\b'}
-    return [r for r in requirements if r['attribute'] not in ('pose', 'state')
-            or r['expected'].strip().lower() not in stated
-            or re.search(stated[r['expected'].strip().lower()], scene, re.I)]
+    names = sorted({re.sub(r'^(?:the|a|an)\s+', '', name.strip().lower())
+                    for name in subjects}, key=len, reverse=True)
+    result = []
+    for requirement in requirements:
+        pattern = stated.get(requirement['expected'].strip().lower())
+        if requirement['attribute'] in ('pose', 'state') and pattern:
+            matches = list(re.finditer(pattern, scene, re.I))
+            if not matches:
+                continue
+            subject = re.sub(r'^(?:the|a|an)\s+', '', requirement['subject'].strip().lower())
+            if requirement['attribute'] == 'state' and subject in names:
+                owners = [_state_owner(scene, match, names) for match in matches]
+                if all(owners) and subject not in owners:
+                    continue
+        result.append(requirement)
+    return result
 
 
 def review_page(script, vision, include_cover=True, private_names=()):
@@ -82,9 +113,10 @@ def review_page(script, vision, include_cover=True, private_names=()):
     panels = answer.get('panels')
     if not isinstance(panels, list) or len(panels) != len(script['panels']):
         raise ValueError('comic_preflight_invalid')
-    requirements = [_explicit_requirements(scene['scene'], _requirements(p.get('requirements')))
+    subjects = ['Hero', *[p['name'] for p in script['cast'].get('props', [])]]
+    requirements = [_explicit_requirements(scene['scene'], _requirements(p.get('requirements')), subjects)
                     if isinstance(p, dict) else _requirements(None) for scene, p in zip(script['panels'], panels)]
     cover_requirements = _requirements(answer.get('cover_requirements'))
-    cover_requirements = _explicit_requirements(script['cover']['scene'], cover_requirements)
+    cover_requirements = _explicit_requirements(script['cover']['scene'], cover_requirements, subjects)
     return {**script, 'panels': [{**p, 'requirements': scene_requirements(p['scene'], r)} for p, r in zip(script['panels'], requirements)],
             'cover': {**script['cover'], 'requirements': scene_requirements(script['cover']['scene'], cover_requirements)}}
