@@ -18,7 +18,8 @@ INSPECT_PROMPT = (
     "false. Count sound effects, pseudo-lettering and empty speech bubbles or caption rectangles as has_text=true; "
     "do not count ordinary windows, doors, books or architectural panels as empty lettering containers. "
     "bad_anatomy: true if any person has more than two arms or more than two hands, a hand with more than five "
-    "fingers, or a hand or arm that belongs to nobody; false otherwise (a hand hidden out of frame is fine). "
+    "fingers, or a genuinely duplicated/disconnected limb; false otherwise. A deliberate hand detail may hide "
+    "the owner outside the crop: do not call it disconnected just because the head or body is not visible. "
     'Also return integers "people" (how many people are drawn, any size) and "hands_visible" (how many separate '
     "human hands are visible in the image)."
 )
@@ -129,7 +130,7 @@ def inspect_art(image: Image.Image, vision: VisionClient, references=(), context
                     if all(c.get('observed_shape') in ('triangular_prism', 'other', 'uncertain', 'not_visible') for c in visible):
                         found['prop_shape_mismatch'] = any(ordered[name]['visible'] and ordered[name].get('observed_shape') != shape for name, shape in shapes.items())
     people, hands = answer.get("people"), answer.get("hands_visible")
-    if all(isinstance(n, (int, float)) and not isinstance(n, bool) and math.isfinite(n) for n in (people, hands)) and hands > 2 * people:
+    if all(isinstance(n, (int, float)) and not isinstance(n, bool) and math.isfinite(n) for n in (people, hands)) and people > 0 and hands > 2 * people:
         found["bad_anatomy"] = True
     return found
 

@@ -88,6 +88,22 @@ class PageRenderer:
         self._previous: Optional[Image.Image] = None
         self.prop_anchors = {}
         self.audit = []
+        self.current_stage = "unknown"
+        self.current_panel = None
+        self._diagnostic_start = 0
+
+    def failure_diagnostic(self, cover=False):
+        """Only fixed identifiers and scalar fields may leave private attempt diagnostics."""
+        flags = ("has_text", "bad_anatomy", "identity_mismatch", "design_mismatch", "scene_mismatch",
+                 "requirement_mismatch", "prop_mismatch", "prop_shape_mismatch")
+        stage = "cover" if cover else self.current_stage
+        report = self.audit[-1] if len(self.audit) > self._diagnostic_start else {}
+        if cover and report.get("kind") != "cover":
+            report = {}
+        checks = report.get("checks", {}) if stage in ("sheet", "panel", "cover") else {}
+        return {"stage": stage, "panel": self.current_panel if stage in ("panel", "lettering") else None,
+                "failedChecks": [key for key in flags if checks.get(key) is True],
+                "uncheckedChecks": [key for key in flags if key in checks and checks[key] is None]}
 
     @property
     def total_cost(self) -> float:
@@ -113,11 +129,13 @@ class PageRenderer:
         if self._sheet or not path:
             return self._sheet
         if not Path(path).exists():
+            self.current_stage = "sheet"
+            self._diagnostic_start = len(self.audit)
             references = [self.options.photo] if self.options.photo else []
             prompt = sheet_prompt(self.cast, self.cast["characters"][0], ["photo"] if references else [])
             try:
                 if self.options.check_art:
-                    sheet = draw_checked(self.images, self.vision, prompt, references, "2:3")
+                    sheet = draw_checked(self.images, self.vision, prompt, references, "2:3", audit=self.audit)
                 else:
                     sheet = request_art(self.images, prompt, references, "2:3")
                 sheet.save(path)
@@ -153,6 +171,8 @@ class PageRenderer:
             roles.append("previous")
             references.append(image_url(self._previous))
         requirements = scene_requirements(panel["scene"], panel.get("requirements", []))
+        self.current_stage = "panel"
+        self._diagnostic_start = len(self.audit)
         try:
             art = self._art(self._image_prompt(panel, tuple(roles)), references, closest_aspect_ratio(*size), size=size, requirements=requirements)
             for prop in art.info.get("comic_verification", {}).get("prop_checks", []):
@@ -214,10 +234,12 @@ class PageRenderer:
         images = []
         self._previous = None
         for number, (panel, slot) in enumerate(zip(panels, layout), 1):
+            self.current_panel = number
             size = tuple(slot.get_content_area()[2:])
             art = self._draw_panel(panel, size)
             art.save(path.parent / f"art_{path.stem}_{number}.png", format="PNG")
             self._previous = art
+            self.current_stage = "lettering"
             images.append(self._letter(art, panel))
 
         if self.options.sheet_path and Path(self.options.sheet_path).exists() and self.prop_anchors:

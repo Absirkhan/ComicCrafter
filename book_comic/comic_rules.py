@@ -34,6 +34,8 @@ ANATOMY_RULE = (
     "hand with five fingers on its own arm, two legs, one head. Count each person's hands before finishing; never "
     "add a third arm or hand, even when they hold or operate several things at once. Gadgets, armour or tools are "
     "worn on or held by a normal limb and never replace or add one. "
+    "This describes the whole person, not what must be visible: respect the requested crop and never add "
+    "occluded hands, limbs or a head just to show the complete body. "
 )
 
 # Image rules for every story panel. Never mention "title" or "caption text" here: naming lettering
