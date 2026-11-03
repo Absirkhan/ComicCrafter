@@ -51,6 +51,31 @@ def test_a_hard_defect_is_never_kept_even_when_it_is_the_only_failure(hard):
     assert art.getpixel((0, 0)) == GREEN
 
 
+SEAM = {"scene_mismatch": True, "corrections": ["Remove the horizontal dividing seam across the top of the frame."]}
+
+
+def test_a_seam_is_never_kept():
+    # Production 2026-11-03 (e986d71f page 1 panel 1): the kept draw had a dividing line across the top.
+    images = FakeImages(colours("red", "green", "blue"))
+    vision = judge({RED: SEAM, GREEN: {"scene_mismatch": True, "design_mismatch": True}, BLUE: SEAM})
+    art = draw_checked(images, vision, "scene", [], "2:3", fallback=True)
+    assert art.getpixel((0, 0)) == GREEN
+
+
+def test_three_seams_fail_the_panel():
+    images = FakeImages(colours("red", "green", "blue"))
+    with pytest.raises(ArtCheckError, match="comic_art_rejected"):
+        draw_checked(images, judge({c: SEAM for c in (RED, GREEN, BLUE)}), "scene", [], "2:3", fallback=True)
+
+
+def test_a_seam_word_without_a_scene_mismatch_is_not_a_hard_defect():
+    # The checker flags a real seam as scene_mismatch; a stray word in another correction blocks nothing.
+    images = FakeImages(colours("red", "green", "blue"))
+    stray = {"design_mismatch": True, "corrections": ["Remove the strip of tape from the jacket."]}
+    vision = judge({RED: stray, GREEN: {"design_mismatch": True, "scene_mismatch": True}, BLUE: stray})
+    assert draw_checked(images, vision, "scene", [], "2:3", fallback=True).getpixel((0, 0)) == RED
+
+
 def test_three_hard_defects_still_fail_the_panel():
     images = FakeImages(colours("red", "green", "blue"))
     vision = judge({RED: {"has_text": True}, GREEN: {"bad_anatomy": True}, BLUE: {"identity_mismatch": True}})

@@ -19,9 +19,11 @@ from book_comic.framing import detail_framing
 # 2026-11-03), as it stacked a strip on covers asked for an empty top. Only a simple background is asked for.
 FULL_BLEED = ("It is part of the one continuous scene, with the same light and perspective, never a blank or "
               "separate strip, inset, seam or box.")
+# Wide and extreme long shots: never name the upper third or a band (production 2026-11-03: wide shots asked
+# for "simple scenery across the upper third" drew a framed box or a dividing line across the top on every draw).
 BAND = (
-    "CALM AREA: let the setting continue above the figure as simple, low-detail scenery (sky, ceiling, "
-    "treetops or upper wall) across the upper third, with faces, important hands and focal props below it."
+    "CALM AREA: above the figure, the same setting simply carries on up to the top edge as open, low-detail "
+    "scenery (sky, ceiling, treetops or building tops), with faces, important hands and focal props lower down."
 )
 SIDE = (
     "CALM AREA: keep the requested crop; the head may reach into the upper third of the frame, so never "
