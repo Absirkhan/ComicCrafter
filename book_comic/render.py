@@ -135,7 +135,8 @@ class PageRenderer:
         if self.options.check_art:
             return draw_checked(self.images, self.vision, prompt, references, aspect_ratio, size=size, framing=framing,
                                 requirements=requirements, props=self.cast.get("props", []), anchors=self.prop_anchors, audit=self.audit,
-                                on_reject=self.rejected.hook("panel", self.current_panel or 0), fallback=True)
+                                on_reject=self.rejected.hook("panel", self.current_panel or 0), fallback=True,
+                                on_select=self.rejected.select_hook("panel", self.current_panel or 0))
         return request_art(self.images, prompt, references, aspect_ratio)
 
     def character_sheet(self) -> Optional[str]:

@@ -9,7 +9,7 @@ from PIL import Image, ImageOps
 
 from book_comic.best_draw import fallback_verification, pick_fallback
 from book_comic.comic_rules import ANATOMY_RULE, NO_TEXT_RULE, prop_shape
-from book_comic.rejected_art import report as report_rejected
+from book_comic.rejected_art import report as report_rejected, report_selected
 from generation.openrouter_image_client import OpenRouterImageClient
 from generation.vision_client import VisionClient
 
@@ -176,7 +176,7 @@ def draw_checked(
     references: Sequence[str],
     aspect_ratio: str,
     size=None,
-    requirements=(), props=(), anchors=None, audit=None, on_reject=None, framing="", fallback=False,
+    requirements=(), props=(), anchors=None, audit=None, on_reject=None, framing="", fallback=False, on_select=None,
 ) -> Image.Image:
     """Bounded redraws for explicit defects only. Unchecked or rejected art is never returned.
 
@@ -185,7 +185,8 @@ def draw_checked(
     framing, when given (book_comic.framing.framing_block), is repeated in the redraw after a scene or
     requirement mismatch, since a wrong crop or facing direction is the usual cause.
     fallback: when every draw was rejected, return the least-bad one without a hard defect
-    (book_comic.best_draw) instead of raising; its audit report carries "fallback": True.
+    (book_comic.best_draw) instead of raising; its audit report carries "fallback": True and
+    on_select(draw), when given, is told which 1-based draw was kept.
     """
     redraw, negative, rejected = "", None, []
     for draw in range(1, MAX_DRAWS + 1):
@@ -223,5 +224,6 @@ def draw_checked(
         raise ArtCheckError("comic_art_rejected")
     art, found, report = rejected[best]
     report["fallback"] = True
+    report_selected(on_select, best + 1)
     art.info["comic_verification"] = fallback_verification(found)
     return art

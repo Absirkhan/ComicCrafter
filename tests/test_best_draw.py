@@ -93,3 +93,24 @@ def test_the_character_sheet_never_uses_the_fallback(tmp_path):
     with pytest.raises(ArtCheckError, match="comic_art_rejected"):
         r.character_sheet()
     assert not (tmp_path / "sheet.png").exists()
+
+
+def test_the_kept_draw_is_marked_selected_among_the_saved_rejections(tmp_path):
+    import json
+    vision = judge({RED: {"scene_mismatch": True, "design_mismatch": True}, GREEN: {"scene_mismatch": True},
+                    BLUE: {"has_text": True}})
+    r = PageRenderer(CAST, FakeImages(colours("red", "green", "blue")), vision, SMALL,
+                     RenderOptions(check_art=True, rejected_dir=tmp_path / "rejected"))
+    r.render_page([{"scene": "Dana at the gate"}], tmp_path / "page_02.png")
+    saved = {p.stem: json.loads(p.read_text()) for p in (tmp_path / "rejected").glob("*.json")}
+    assert sorted(saved) == ["panel_p1_d1", "panel_p1_d2", "panel_p1_d3"]
+    assert [saved[f"panel_p1_d{d}"].get("selected") for d in (1, 2, 3)] == [None, True, None]
+
+
+def test_a_failing_select_hook_never_changes_the_render():
+    def boom(draw):
+        raise RuntimeError("bookkeeping broke")
+    images = FakeImages(colours("red", "green", "blue"))
+    art = draw_checked(images, judge({c: {"scene_mismatch": True} for c in (RED, GREEN, BLUE)}), "scene", [], "2:3",
+                       fallback=True, on_select=boom)
+    assert art.getpixel((0, 0)) == RED
