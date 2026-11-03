@@ -60,14 +60,36 @@ PANEL_RULES = (
 NO_TEXT_RULE = (
     "Absolutely no writing anywhere in the image: no letters, words, captions, labels, signs, speech "
     "bubbles, empty caption boxes or sound-effect lettering. Objects that usually carry writing have plain surfaces, "
-    "not garbled glyphs. Instrument faces use geometric ticks and pointers only: no cardinal letters, digits or invented glyphs. Do not draw an empty white rectangle as a placeholder for later lettering."
+    "not garbled glyphs. Walls, posters, murals, graffiti, billboards and plaques are plain paint, texture or simple "
+    "pictures with no letters or letter-like marks. Instrument faces use geometric ticks and pointers only: no cardinal letters, digits or invented glyphs. Do not draw an empty white rectangle as a placeholder for later lettering."
 )
 
 # Every story panel: the model sometimes splits one panel into two pictures with a seam line
 SINGLE_IMAGE_RULE = (
     "One single continuous image: no panel borders, seams, split-screen or horizontal or vertical dividing "
-    "lines across the picture."
+    "lines across the picture. The setting runs unbroken from the top edge to the bottom edge, behind and "
+    "around the figure; never stack two pictures, bands or strips."
 )
+SEAM_CORRECTION = re.compile(r"\b(?:seam|divider|dividing|split[- ]screen|panel (?:line|border)|border line|"
+                             r"two (?:panels|pictures|images)|stacked|strip)\b", re.I)
+
+# Every story panel in a place that is normally busy: the image model fills streets and stations with
+# passers-by, which the checker rejects as extra humans. COMIC_CAST_RULE (app) already says Hero is the
+# only human; this names the busy place as empty, only where the scene implies a crowd.
+CROWD_PLACES = re.compile(
+    r"\b(?:streets?|city|cities|town|downtown|avenue|alley(?:way)?s?|crosswalk|sidewalk|pavement|plaza|square|"
+    r"market(?:place)?s?|bazaar|mall|shops?|stores?|caf[eé]s?|restaurants?|stations?|platforms?|subway|metro|"
+    r"underground|tunnels?|train|tram|bus(?:es)?|airport|terminal|stadium|arena|crowds?|crowded|busy|"
+    r"school(?:yard)?|hallway|corridor|lobby|harbou?r|port|pier|boardwalk|fair|festival|carnival)\b", re.I)
+EMPTY_PLACE_RULE = (
+    "Apart from the characters listed, the place is empty of people: no pedestrians, passers-by, background "
+    "figures, silhouettes or reflections of people. "
+)
+
+
+def crowd_rule(scene: str) -> str:
+    """EMPTY_PLACE_RULE when the scene is set where people usually are, else ""."""
+    return EMPTY_PLACE_RULE if CROWD_PLACES.search(scene or "") else ""
 
 
 def prop_shape(prop):
@@ -87,6 +109,8 @@ def props_rule(cast: Dict) -> str:
         geometry + " Recurring props, drawn exactly as described every time they appear "
         f"(fixed identifying geometry, base colour, material and scale): {listed}. "
         "Allow approved changes of pose, position, opening, glow, lighting or damage while preserving the object's identity. "
+        "Each story prop appears exactly once, in the state the scene says: held or worn, never both, and never a "
+        "second copy of it. "
         "Translate base colours into the selected style's palette; use identifying value contrast in monochrome. "
     )
 
