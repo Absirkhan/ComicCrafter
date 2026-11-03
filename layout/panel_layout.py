@@ -19,6 +19,7 @@ class LayoutType(Enum):
     GRID_3X3 = "grid_3x3"
     VERTICAL_STRIP = "vertical_strip"
     HORIZONTAL_STRIP = "horizontal_strip"
+    FULL_PAGE = "full_page"  # one splash panel filling the strip's outer frame
     CUSTOM = "custom"
 
 
@@ -108,6 +109,9 @@ class LayoutManager:
             return self._create_strip_layout(num_panels or 4, vertical=True)
         elif layout_type == LayoutType.HORIZONTAL_STRIP:
             return self._create_strip_layout(num_panels or 3, vertical=False)
+        elif layout_type == LayoutType.FULL_PAGE:
+            # Same margins as a strip, so a splash page lines up with its neighbours in print
+            return self._create_strip_layout(1, vertical=True)
         else:
             logger.warning(f"Unknown layout type: {layout_type}, using 2x3 grid")
             return self._create_grid_layout(2, 3)
@@ -256,7 +260,7 @@ class LayoutManager:
         
         # Layout selection logic
         layout_map = {
-            1: LayoutType.VERTICAL_STRIP,
+            1: LayoutType.FULL_PAGE,
             2: LayoutType.GRID_2X2,
             3: LayoutType.VERTICAL_STRIP,
             4: LayoutType.GRID_2X2,
