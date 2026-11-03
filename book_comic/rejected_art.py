@@ -38,12 +38,29 @@ def _requirement_failed(check: Dict, requirement: Dict) -> bool:
             or (requirement.get("attribute") in ("hand", "framing") and observed != expected))
 
 
+# The checker's fixed answers for pose, state, hand side and framing: safe to show next to each other.
+VOCABULARY = {"standing", "kneeling", "seated", "crouching", "open", "closed", "flat", "upright", "right", "left",
+              "ambiguous", "not_visible", "hand_detail_only", "feet_detail_only", "body_visible"}
+VOCABULARY_ATTRIBUTES = ("pose", "state", "hand", "framing")
+
+
+def _requirement_reason(check: Dict, requirement: Dict) -> object:
+    """"state: expected open, saw closed" when both sides are fixed vocabulary; otherwise the observation as written."""
+    observed = check.get("observed")
+    expected = str(requirement.get("expected", "")).strip().lower()
+    seen = str(observed or "").strip().lower()
+    attribute = requirement.get("attribute")
+    if attribute in VOCABULARY_ATTRIBUTES and expected in VOCABULARY and seen in VOCABULARY:
+        return f"{attribute}: expected {expected.replace('_', ' ')}, saw {seen.replace('_', ' ')}"
+    return observed
+
+
 def _candidates(found: Dict, requirements: Sequence[Dict]) -> Iterable[object]:
     if found.get("requirement_mismatch"):
         for check in found.get("requirement_checks") or []:
             index = check.get("index") if isinstance(check, dict) else None
             if type(index) is int and 0 <= index < len(requirements) and _requirement_failed(check, requirements[index]):
-                yield check.get("observed")
+                yield _requirement_reason(check, requirements[index])
     if found.get("prop_mismatch") or found.get("prop_shape_mismatch"):
         for check in found.get("prop_checks") or []:
             if isinstance(check, dict) and check.get("visible") is True and check.get("matches") is False:
