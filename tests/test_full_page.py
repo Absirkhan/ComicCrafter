@@ -119,3 +119,19 @@ def test_three_panel_pages_keep_the_strip(tmp_path):
     assert [len(c["references"]) for c in images.calls] == [0, 1, 1]  # the previous panel of the page
     assert [Image.open(tmp_path / f"art_page_{n}.png").size for n in (1, 2, 3)] == \
         [tuple(s.get_content_area()[2:]) for s in strip]
+
+
+def test_a_splash_whose_three_draws_are_all_soft_rejected_keeps_the_least_bad_one(tmp_path):
+    """Splash pages follow the panel rule: keep the least-bad draw, mark it selected, never keep a hard defect."""
+    import json
+    red, green, blue = (255, 0, 0), (0, 128, 0), (0, 0, 255)
+    out = tmp_path / "rejected"
+    images = FakeImages([scenery("red"), scenery("green"), scenery("blue")])
+    vision = judge({red: {"scene_mismatch": True, "design_mismatch": True}, green: {"scene_mismatch": True},
+                    blue: {"has_text": True}})
+    r = PageRenderer(CAST, images, vision, print_layouts(), RenderOptions(check_art=True, rejected_dir=out))
+    page = r.render_page([{"scene": SPLASH["en"]["scene"]}], tmp_path / "page.png")
+    assert Image.open(page).size == PRINT_PAGE_SIZE and len(images.calls) == 3
+    saved = {p.stem: json.loads(p.read_text()) for p in out.glob("*.json")}
+    assert [saved[f"panel_p1_d{d}"].get("selected") for d in (1, 2, 3)] == [None, True, None]
+    assert [a.get("fallback") for a in r.audit if a.get("stage", "panel") == "panel"][-3:] == [None, True, None]
