@@ -1,0 +1,118 @@
+"""Opt-in record of art the vision check rejected, for reviewing why images fail.
+
+Each rejected draw becomes <stage>_p<panel>_d<draw>.png and a .json beside it holding only fixed
+check names and the vision check's own short observations of the failed checks. Prompt text,
+requirement text and character names never reach the JSON. Saving never changes the render.
+"""
+
+import json
+import logging
+from pathlib import Path
+from typing import Dict, Iterable, List, Optional, Sequence
+
+from PIL import Image
+
+logger = logging.getLogger(__name__)
+
+CHECK_NAMES = ("has_text", "bad_anatomy", "identity_mismatch", "design_mismatch", "scene_mismatch",
+               "requirement_mismatch", "prop_mismatch", "prop_shape_mismatch")
+UNAVAILABLE = "check_unavailable"
+MAX_SAVED = 12
+MAX_REASONS = 8
+REASON_CHARS = 300
+
+
+def failed_checks(found: Dict, unavailable: bool = False) -> List[str]:
+    """Names of the truthy check flags, plus check_unavailable when the check could not run."""
+    names = [k for k in CHECK_NAMES if found.get(k)]
+    return names + [UNAVAILABLE] if unavailable else names
+
+
+def _requirement_failed(check: Dict, requirement: Dict) -> bool:
+    observed = str(check.get("observed", "")).strip().lower()
+    expected = str(requirement.get("expected", "")).strip().lower()
+    if observed == "not_visible" and requirement.get("attribute") == "design":
+        return False
+    return (check.get("matches") is not True or observed == "not_visible"
+            or (requirement.get("attribute") in ("hand", "framing") and observed != expected))
+
+
+def _candidates(found: Dict, requirements: Sequence[Dict]) -> Iterable[object]:
+    if found.get("requirement_mismatch"):
+        for check in found.get("requirement_checks") or []:
+            index = check.get("index") if isinstance(check, dict) else None
+            if type(index) is int and 0 <= index < len(requirements) and _requirement_failed(check, requirements[index]):
+                yield check.get("observed")
+    if found.get("prop_mismatch") or found.get("prop_shape_mismatch"):
+        for check in found.get("prop_checks") or []:
+            if isinstance(check, dict) and check.get("visible") is True and check.get("matches") is False:
+                yield check.get("observed")
+    if any(found.get(k) for k in CHECK_NAMES):
+        yield from found.get("corrections") or []
+
+
+def failure_reasons(found: Dict, prompt: str = "", requirements: Sequence[Dict] = (), names: Sequence[str] = ()) -> List[str]:
+    """The vision check's own short observations for failed checks only, without echoes of the brief.
+
+    A string that repeats the prompt or a requirement, or mentions a character or prop name, is left out.
+    """
+    brief = prompt.lower()
+    echoes = {str(r.get(k, "")).strip().lower() for r in requirements for k in ("subject", "expected")}
+    blocked = [n.strip().lower() for n in names if n and n.strip()]
+    reasons: List[str] = []
+    for text in _candidates(found, requirements):
+        if not isinstance(text, str) or not text.strip():
+            continue
+        text = text.strip()[:REASON_CHARS]
+        low = text.lower()
+        if low in brief or low in echoes or any(n in low for n in blocked) or text in reasons:
+            continue
+        reasons.append(text)
+        if len(reasons) == MAX_REASONS:
+            break
+    return reasons
+
+
+class RejectedArtSaver:
+    """Writes at most MAX_SAVED rejected draws into one directory; errors are logged and swallowed."""
+
+    def __init__(self, directory: Optional[Path], names: Sequence[str] = (), limit: int = MAX_SAVED):
+        self.directory = Path(directory) if directory else None
+        self.names = tuple(names)
+        self.limit = limit
+        self.saved = 0
+
+    def hook(self, stage: str, panel: int = 0):
+        """A callback for one draw loop, or None when nothing is recorded."""
+        if self.directory is None:
+            return None
+
+        def on_reject(draw: int, art: Image.Image, found: Dict, unavailable: bool = False,
+                      prompt: str = "", requirements: Sequence[Dict] = ()) -> None:
+            self.save(stage, panel, draw, art, found, unavailable, prompt, requirements)
+        return on_reject
+
+    def save(self, stage, panel, draw, art, found, unavailable=False, prompt="", requirements=()) -> None:
+        if self.directory is None or self.saved >= self.limit:
+            return
+        self.saved += 1
+        try:
+            stem = f"{stage}_p{int(panel)}_d{int(draw)}"
+            record = {"stage": stage, "panel": int(panel), "draw": int(draw),
+                      "failed_checks": failed_checks(found, unavailable),
+                      "reasons": failure_reasons(found, prompt, requirements, self.names)}
+            self.directory.mkdir(parents=True, exist_ok=True)
+            art.convert("RGB").save(self.directory / f"{stem}.png", format="PNG")
+            (self.directory / f"{stem}.json").write_text(json.dumps(record, ensure_ascii=False), encoding="utf-8")
+        except Exception as e:  # never let review bookkeeping change the render
+            logger.debug(f"Could not save rejected art: {e}")
+
+
+def report(on_reject, draw, art, found, unavailable=False, prompt="", requirements=()) -> None:
+    """Call an optional reject hook without ever raising."""
+    if on_reject is None:
+        return
+    try:
+        on_reject(draw, art, found, unavailable, prompt, requirements)
+    except Exception as e:
+        logger.debug(f"Rejected-art hook failed: {e}")

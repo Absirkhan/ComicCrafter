@@ -47,7 +47,7 @@ def _draw_cover(renderer: PageRenderer, cast: Dict, output_dir: Path, path: Path
         return render_cover(
             cast, cast["cover"], (renderer.layouts.page_width, renderer.layouts.page_height), path,
             renderer.images, renderer.vision, panels=panels, references=references, reference_roles=roles,
-            dpi=options.dpi,
+            dpi=options.dpi, on_reject=renderer.rejected.hook("cover"),
         )
     except Exception as e:
         if options.fail_on_image_error:
