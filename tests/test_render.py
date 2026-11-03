@@ -46,15 +46,17 @@ def test_a_failed_image_is_gray_by_default_and_fails_the_job_when_asked(tmp_path
 def test_sheet_photo_and_previous_panel_are_references(tmp_path):
     images = FakeImages([Image.new("RGB", (64, 64), "white")])
     r = renderer(images, photo="data:photo", sheet_path=tmp_path / "sheet.png", chain_panels=True, dpi=300)
-    path = r.render_page([{"scene": "Wide shot: a"}, {"scene": "Close-up: b"}], tmp_path / "page_01.png")
-    sheet, first, second = images.calls
+    path = r.render_page([{"scene": "Wide shot: a"}, {"scene": "Close-up: b"}, {"scene": "Medium shot: c"}],
+                         tmp_path / "page_01.png")
+    sheet, first, second, third = images.calls
     assert "three-quarter pose" in sheet["prompt"] and sheet["references"] == ["data:photo"]
     assert len(first["references"]) == 2 and first["references"][0] == "data:photo"
     assert len(second["references"]) == 3 and "reference image 3 is the previous panel" in second["prompt"]
     assert "the previous panel of this page" not in first["prompt"]
     assert round(Image.open(path).info["dpi"][0]) == 300
-    r.render_page([{"scene": "Wide shot: c"}], tmp_path / "page_02.png")
-    assert len(images.calls) == 4  # the sheet is drawn once per book
+    assert len(third["references"]) == 3
+    r.render_page([{"scene": "Wide shot: d"}], tmp_path / "page_02.png")
+    assert len(images.calls) == 5  # the sheet is drawn once per book
 
 
 def test_art_with_painted_text_is_drawn_once_more():

@@ -31,6 +31,8 @@ logger = logging.getLogger(__name__)
 PRINT_DPI = 300
 PRINT_PAGE_SIZE = (math.ceil(6.875 * PRINT_DPI), math.ceil(10.5 * PRINT_DPI))  # (2063, 3150)
 RTL_LANGUAGES = {"he", "ar", "fa", "ur", "yi"}
+# A page is one full-page splash panel or a three-panel vertical strip
+PAGE_LAYOUTS = {1: LayoutType.FULL_PAGE, 3: LayoutType.VERTICAL_STRIP}
 
 
 @dataclass
@@ -170,13 +172,13 @@ class PageRenderer:
             self._sheet = image_url(sheet.convert("RGB"))
         return self._sheet
 
-    def _image_prompt(self, panel: Dict, roles: tuple = ()) -> str:
+    def _image_prompt(self, panel: Dict, roles: tuple = (), splash: bool = False) -> str:
         people = "; ".join(
             f"{c['name_en']}: {c['look']}" for c in map(self._character, panel.get("characters", []))
         )
-        return panel_prompt({**self.cast, "prop_anchors": self.prop_anchors}, panel, people, roles)
+        return panel_prompt({**self.cast, "prop_anchors": self.prop_anchors}, panel, people, roles, splash=splash)
 
-    def _draw_panel(self, panel: Dict, size: tuple) -> Image.Image:
+    def _draw_panel(self, panel: Dict, size: tuple, splash: bool = False) -> Image.Image:
         roles, references = [], []
         for role, url in (("photo", self.options.photo), ("sheet", self.character_sheet())):
             if url:
@@ -190,7 +192,7 @@ class PageRenderer:
         self._diagnostic_start = len(self.audit)
         try:
             framing = framing_block(self.cast, panel, requirements)
-            art = self._art(self._image_prompt(panel, tuple(roles)), references, closest_aspect_ratio(*size), size=size,
+            art = self._art(self._image_prompt(panel, tuple(roles), splash), references, closest_aspect_ratio(*size), size=size,
                             requirements=requirements, framing=framing)
             for prop in art.info.get("comic_verification", {}).get("prop_checks", []):
                 if prop["visible"]:
@@ -202,7 +204,8 @@ class PageRenderer:
             logger.warning(f"Panel image failed, using a gray placeholder: {e}")
             return Image.new("RGB", size, (200, 200, 200))
 
-    def _letter(self, image: Image.Image, panel: Dict) -> Image.Image:
+    def _letter(self, image: Image.Image, panel: Dict, type_height: Optional[int] = None) -> Image.Image:
+        """Caption, bubbles and note; type_height sizes the type as for a panel that tall (default: the art's)."""
         self.lettering_checks = set()
         dialogue = [d for d in panel.get("dialogue", []) if d.get("text")]
         caption = panel.get("caption", "")
@@ -228,8 +231,8 @@ class PageRenderer:
             try:
                 reserved_boxes = []
                 if note:
-                    box = text_box(ImageDraw.Draw(image), image.size, note, max(14, int(image.height * NOTE_SIZE)),
-                                   note_corner(rtl), font, dry=True)
+                    note_size = max(14, int((type_height or image.height) * NOTE_SIZE))
+                    box = text_box(ImageDraw.Draw(image), image.size, note, note_size, note_corner(rtl), font, dry=True)
                     subjects = [(int(x * image.width), int(y * image.height), int(w * image.width), int(h * image.height))
                                 for x, y, w, h in plan.protected]
                     subjects += [head_box(p, image.size) for p in plan.speakers if p]
@@ -237,8 +240,8 @@ class PageRenderer:
                         raise ValueError("comic_lettering_no_space")
                     reserved_boxes.append(box)
                 lettered = render_dialogue(image, texts, caption, plan, kinds=kinds, rtl=rtl,
-                                           font_path=font, reserved=reserved_boxes)
-                return draw_note(lettered, note, rtl=rtl, font_path=font)
+                                           font_path=font, reserved=reserved_boxes, type_height=type_height)
+                return draw_note(lettered, note, rtl=rtl, font_path=font, type_height=type_height)
             except ValueError as error:
                 if str(error) not in ("comic_lettering_no_space", "comic_lettering_overflow"):
                     raise
@@ -246,18 +249,30 @@ class PageRenderer:
         raise ValueError("comic_lettering_no_space")
 
     def render_page(self, panels: List[Dict], path: Path) -> Path:
-        """Draw, letter and compose one page. Unlettered art is kept as art_<page>_<n>.png beside it."""
-        layout = self.layouts.create_layout(LayoutType.VERTICAL_STRIP, num_panels=len(panels))
+        """Draw, letter and compose one page. Unlettered art is kept as art_<page>_<n>.png beside it.
+
+        Three panels make a vertical strip. One panel is a full-page splash: one portrait image filling the
+        strip's outer frame, lettered with at most one caption and one bubble at a strip panel's type size.
+        """
+        if len(panels) not in PAGE_LAYOUTS:
+            raise ValueError(f"comic_page_panel_count: a page has 1 (full-page splash) or 3 panels, got {len(panels)}")
+        splash = len(panels) == 1
+        if splash and len([d for d in panels[0].get("dialogue", []) if d.get("text")]) > 1:
+            raise ValueError("comic_splash_lettering: a full-page splash takes at most one caption and one bubble")
+        layout = self.layouts.create_layout(PAGE_LAYOUTS[len(panels)], num_panels=len(panels))
+        # A splash is lettered at the size of a strip panel so its type matches the other pages
+        type_height = self.layouts.create_layout(LayoutType.VERTICAL_STRIP, num_panels=3)[0].get_content_area()[3] \
+            if splash else None
         images = []
         self._previous = None
         for number, (panel, slot) in enumerate(zip(panels, layout), 1):
             self.current_panel = number
             size = tuple(slot.get_content_area()[2:])
-            art = self._draw_panel(panel, size)
+            art = self._draw_panel(panel, size, splash)
             art.save(path.parent / f"art_{path.stem}_{number}.png", format="PNG")
             self._previous = art
             self.current_stage = "lettering"
-            images.append(self._letter(art, panel))
+            images.append(self._letter(art, panel, type_height))
 
         if self.options.sheet_path and Path(self.options.sheet_path).exists() and self.prop_anchors:
             with Image.open(self.options.sheet_path) as sheet:

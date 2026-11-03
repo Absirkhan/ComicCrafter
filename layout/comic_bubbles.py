@@ -89,6 +89,7 @@ def draw_speech_bubble(
     kind: str = "speech",
     font_path: Optional[str] = None,
     wrap_share: Optional[float] = None,
+    type_height: Optional[int] = None,
 ) -> None:
     """Draw a bubble of the given kind near center with a tail toward the speaker.
 
@@ -100,12 +101,14 @@ def draw_speech_bubble(
         placed: Areas to keep clear (heads, caption, earlier bubbles); updated in place
         kind: One of bubble_shapes.BUBBLE_KINDS; anything else is drawn as "speech"
         font_path: Lettering font file (defaults to the bundled/system fonts)
+        type_height: Panel height the type and lines are sized for (default: the image's own height)
     """
     kind = shapes.bubble_kind(kind)
     w, h = image.size
+    type_h = type_height or h
     draw = ImageDraw.Draw(image)
-    font = _font(max(16, int(h * 0.05 * shapes.TEXT_SCALE.get(kind, 1))), text, font_path)
-    line_width = max(2, h // 220) + (1 if kind == "shout" else 0)
+    font = _font(max(16, int(type_h * 0.05 * shapes.TEXT_SCALE.get(kind, 1))), text, font_path)
+    line_width = max(2, type_h // 220) + (1 if kind == "shout" else 0)
 
     # Wrap to a roughly 3:1 text block so the oval stays round rather than flat
     line_height = draw.textbbox((0, 0), "Ag", font=font)[3]
@@ -169,6 +172,7 @@ def _render_dialogue_once(
     reserved: Sequence[Rect] = (),
     wrap_share: Optional[float] = None,
     caption_width: float = 0.46,
+    type_height: Optional[int] = None,
 ) -> Image.Image:
     """Return a copy of the panel with its caption and bubbles drawn.
 
@@ -195,24 +199,24 @@ def _render_dialogue_once(
         # and moves only when that corner would cover a speaker's head.
         reading_first = "top-right" if rtl else "top-left"
         other = "top-left" if rtl else "top-right"
-        place_caption(panel, caption, (reading_first, other), heads, placed, rtl, font_path, width_share=caption_width)
+        place_caption(panel, caption, (reading_first, other), heads, placed, rtl, font_path, width_share=caption_width,
+                      type_height=type_height)
     kinds = list(kinds or []) + ["speech"] * (len(dialogue) - len(kinds or []))
     for text, center, speaker, kind in zip(dialogue, plan.bubbles, plan.speakers, kinds):
-        if wrap_share is None:
-            draw_speech_bubble(panel, text, center, speaker, placed, kind, font_path)
-        else:
-            draw_speech_bubble(panel, text, center, speaker, placed, kind, font_path, wrap_share=wrap_share)
+        draw_speech_bubble(panel, text, center, speaker, placed, kind, font_path, wrap_share, type_height)
 
     logger.debug(f"Drew {len(dialogue)} bubbles{' and a caption' if caption else ''}")
     return panel
 
 
-def render_dialogue(image, dialogue, caption, plan, kinds=None, rtl=None, font_path=None, reserved=()):
-    """Try alternative readable text shapes on fresh copies; never shrink or crop artwork."""
+def render_dialogue(image, dialogue, caption, plan, kinds=None, rtl=None, font_path=None, reserved=(), type_height=None):
+    """Try alternative readable text shapes on fresh copies; never shrink or crop artwork.
+
+    type_height sizes the type as for a panel of that height, so a full-page splash letters like a strip panel."""
     for wrap_share, caption_width in ((None, 0.46), (0.45, 0.65), (0.62, 0.88)):
         try:
             return _render_dialogue_once(image, dialogue, caption, plan, kinds, rtl, font_path,
-                                         reserved, wrap_share, caption_width)
+                                         reserved, wrap_share, caption_width, type_height)
         except ValueError as error:
             if str(error) not in ('comic_lettering_no_space', 'comic_lettering_overflow'):
                 raise

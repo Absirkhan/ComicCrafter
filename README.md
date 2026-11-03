@@ -180,6 +180,10 @@ files = client.download_all_outputs(job_id, Path("./output"))
   high for the title gets one more try, and the better of the two attempts is kept. The cover is
   lettered with a shade, a one-line shadowed title, a starring line and a footer. It is placed first
   in the PDF.
+- **Full-page splash**: `PageRenderer.render_page` takes 3 panels (a vertical strip) or 1 panel (a
+  full-page splash, `LayoutType.FULL_PAGE`: one portrait image in the strip's outer frame, with the same
+  references and art check, a splash prompt, and at most one caption and one bubble lettered at a strip
+  panel's type size). Any other count raises `ValueError`.
 - **Print size** (optional): `book_comic.render.print_layouts()` gives 6.875 × 10.5 in pages
   (2063 × 3150 px), and `RenderOptions(dpi=PRINT_DPI)` tags the PNGs at 300 DPI.
 
