@@ -40,6 +40,13 @@ def test_medium_shots_and_close_ups_never_ask_for_a_clear_upper_third(scene):
     assert "the head may reach into the upper third" in prompt and "never lower, shrink or re-crop" in prompt
 
 
+@pytest.mark.parametrize("line", [BAND, SIDE, CORNER])
+def test_the_calm_area_is_scenery_of_the_same_scene_never_a_measured_strip(line):
+    # Live check 2026-11-03: "one side, about two-fifths of its width, calm" drew a blank strip with a seam.
+    assert not any(word in line for word in ("fifths", "width", "strip", "beside", "side of"))
+    assert "never a blank or separate strip" in prompt_for("Medium shot: Hero waits.")
+
+
 def test_an_unlettered_panel_asks_for_no_calm_area_and_lettering_is_never_named_to_the_image_model():
     assert "CALM AREA" not in prompt_for("Medium shot: Hero smiles.", lettered=False)
     for line in (BAND, SIDE, CORNER):

@@ -14,24 +14,28 @@ from typing import Dict, Optional, Sequence
 from book_comic.comic_rules import scene_shot
 from book_comic.framing import detail_framing
 
-FULL_BLEED = "This is one full-bleed illustration, never a blank strip, inset, seam or text box."
+# Never describe the calm area as a region with its own geometry ("one side, two-fifths of the width", "the
+# scenery beside the figure"): the image model then draws blank side strips with seams (live check
+# 2026-11-03), as it stacked a strip on covers asked for an empty top. Only a simple background is asked for.
+FULL_BLEED = ("It is part of the one continuous scene, with the same light and perspective, never a blank or "
+              "separate strip, inset, seam or box.")
 BAND = (
-    "CALM AREA: keep the upper third of the canvas as calm, low-detail natural setting above the figure "
-    "(sky, ceiling, treetops or upper wall), with faces, important hands and focal props below it."
+    "CALM AREA: let the setting continue above the figure as simple, low-detail scenery (sky, ceiling, "
+    "treetops or upper wall) across the upper third, with faces, important hands and focal props below it."
 )
 SIDE = (
     "CALM AREA: keep the requested crop; the head may reach into the upper third of the frame, so never "
-    "lower, shrink or re-crop the figure to make room. Instead place the figure slightly off-centre so that one "
-    "side of the frame, about two-fifths of its width, is calm, low-detail background (plain wall, sky, haze or "
-    "soft shadow) with no face, hand or focal prop in it."
+    "lower, shrink or re-crop the figure to make room. Compose by the rule of thirds with the figure slightly "
+    "off-centre, and keep the background simple and low-detail (open sky, a plain wall or soft shadow), with "
+    "fine detail only on the focal subject."
 )
 CORNER = (
-    "CALM AREA: keep one corner of the frame, about one third of its width, as calm plain surface or soft "
-    "background with no hand, foot or focal object in it."
+    "CALM AREA: let one corner show simple, low-detail surface or background from the same setting, with no "
+    "hand, foot or focal object there."
 )
 ANY = (
-    "CALM AREA: keep one calm, low-detail area of background (at the top, a side or a corner, about one "
-    "third of the frame) free of faces, important hands and focal props."
+    "CALM AREA: let part of the setting (above or beside the subject) be simple, low-detail scenery, free of "
+    "faces, important hands and focal props."
 )
 SHOT_SPACE = {"Extreme long shot": BAND, "Wide shot": BAND, "Medium shot": SIDE, "Close-up": SIDE}
 

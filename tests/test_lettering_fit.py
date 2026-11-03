@@ -14,7 +14,7 @@ from layout.lettering import LETTERING_FONT
 PANEL = (1837, 944)  # one of the three print-page panel slots (print_layouts, VERTICAL_STRIP)
 FONT = str(LETTERING_FONT)  # the bridge letters every language with it (apps/worker/comics/preview.py)
 CAST = {"style": "ink comic", "characters": [{"name_en": "Hero", "look": "teal blazer"}], "language": "he"}
-# Head in the upper third, figure off-centre, one side (about two-fifths) calm. Close-up faces are protected
+# Head in the upper third, figure off-centre, scenery calm beside it (about two-fifths of the width here). Close-up faces are protected
 # generously: the full panel height and over a third of its width.
 LAYOUTS = {
     "medium shot, figure right": ([(0.55, 0.0, 0.2, 0.4), (0.5, 0.55, 0.3, 0.3)], (0.65, 0.3)),
