@@ -43,10 +43,14 @@ def inspect_art(image: Image.Image, vision: VisionClient, references=(), context
     shapes = {p["name"]: prop_shape(p) for p in props if prop_shape(p)}
     if shapes:
         keys.append("prop_shape_mismatch")
-    found = {"head_top": None, **dict.fromkeys(keys)}
+    found = {"head_top": None, "text_prominent": None, **dict.fromkeys(keys)}
     small = image.copy()
     small.thumbnail((2048, 2048))
-    prompt = INSPECT_PROMPT + " Inspect instrument dials closely: cardinal letters (N, E, S, W), digits and invented letter-like markings count as has_text even when tiny or plausible on a compass; simple ticks and needles do not."
+    prompt = INSPECT_PROMPT + " Inspect instrument dials closely: words, cardinal letters (N, E, S, W) and invented letter-like markings count as has_text even when tiny; hour numerals, digits, ticks and needles on a watch, clock, compass or gauge face are normal and do not."
+    prompt += (" Also return text_prominent: true only when has_text is true and the writing is prominent: large or readable words "
+               "in the foreground, writing on the main character or a key prop, a speech bubble or caption box, or a signature or watermark. "
+               "Return text_prominent false when the only writing is small background pseudo-lettering (distant signs, posters, graffiti, "
+               "map or page marks), and false when has_text is false.")
     if context:
         prompt += (
             " The FIRST attached image is the candidate; inspect only it for unwanted writing and anatomy. "
@@ -85,7 +89,7 @@ def inspect_art(image: Image.Image, vision: VisionClient, references=(), context
             "rather than inventing evidence. For each prop with a required_shape, also return observed_shape: triangular_prism, other, uncertain, or not_visible. A triangular prism has three main sides at its cross-section; a hexagonal crystal rod, pointed crystal or obelisk is other. Do not infer shape from the brief or blue glow. If the relevant faces are hidden use uncertain. Verification data: "
             + json.dumps({"requirements": [{"index": i, **r} for i, r in enumerate(requirements)], "props": props, "canonical_designs": anchors or {}, "required_shapes": shapes}, ensure_ascii=False)
         )
-    response_fields = ["head_top", "people", "hands_visible", *[k for k in keys if k not in ("requirement_mismatch", "prop_mismatch", "prop_shape_mismatch")]]
+    response_fields = ["head_top", "people", "hands_visible", "text_prominent", *[k for k in keys if k not in ("requirement_mismatch", "prop_mismatch", "prop_shape_mismatch")]]
     if requirements or props:
         response_fields += ["requirement_checks", "prop_checks"]
     prompt += " For any material mismatch, also return corrections: up to three short, concrete corrections for the next drawing. Otherwise return corrections: []."
@@ -99,6 +103,8 @@ def inspect_art(image: Image.Image, vision: VisionClient, references=(), context
         return found
     if isinstance(answer.get('corrections'), list):
         found['corrections'] = [s[:240] for s in answer['corrections'][:3] if isinstance(s, str)]
+    if isinstance(answer.get("text_prominent"), bool):
+        found["text_prominent"] = answer["text_prominent"]
     head = answer.get("head_top")
     if isinstance(head, (int, float)) and not isinstance(head, bool) and math.isfinite(head) and 0 <= head <= 1000:
         found["head_top"] = head / 1000
@@ -150,7 +156,7 @@ def _valid_evidence(check, allow_hidden=False):
 
 
 def require_checked(found, require_head=False):
-    flags = [v for k, v in found.items() if k not in ("head_top", "requirement_checks", "prop_checks", "corrections")]
+    flags = [v for k, v in found.items() if k not in ("head_top", "text_prominent", "requirement_checks", "prop_checks", "corrections")]
     if any(type(v) is not bool for v in flags) or (require_head and found["head_top"] is None):
         raise ArtCheckError("comic_art_check_unavailable")
     return not any(flags)

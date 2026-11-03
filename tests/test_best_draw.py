@@ -114,3 +114,36 @@ def test_a_failing_select_hook_never_changes_the_render():
     art = draw_checked(images, judge({c: {"scene_mismatch": True} for c in (RED, GREEN, BLUE)}), "scene", [], "2:3",
                        fallback=True, on_select=boom)
     assert art.getpixel((0, 0)) == RED
+
+
+def test_small_background_text_is_soft_and_a_draw_carrying_it_may_be_kept():
+    images = FakeImages(colours("red", "green", "blue"))
+    vision = judge({RED: {"has_text": True, "text_prominent": True}, GREEN: {"has_text": True, "text_prominent": False},
+                    BLUE: {"identity_mismatch": True}})
+    art = draw_checked(images, vision, "scene", [], "2:3", fallback=True)
+    assert art.getpixel((0, 0)) == GREEN
+
+
+@pytest.mark.parametrize("prominent", [True, None])
+def test_prominent_or_unrated_text_stays_a_hard_defect(prominent):
+    images = FakeImages(colours("red", "green", "blue"))
+    text = {"has_text": True, "text_prominent": prominent}
+    with pytest.raises(ArtCheckError, match="comic_art_rejected"):
+        draw_checked(images, judge({RED: text, GREEN: text, BLUE: text}), "scene", [], "2:3", fallback=True)
+
+
+def test_background_text_is_still_redrawn_before_any_fallback():
+    images = FakeImages(colours("red", "green"))
+    art = draw_checked(images, judge({RED: {"has_text": True, "text_prominent": False}}), "scene", [], "2:3", fallback=True)
+    assert art.getpixel((0, 0)) == GREEN and len(images.calls) == 2
+
+
+def test_the_check_asks_for_text_prominence_and_allows_dial_numerals():
+    from book_comic.art_check import inspect_art, require_checked
+    vision = FakeVision(lambda p, i: {**BASE, "head_top": 400, "text_prominent": False})
+    found = inspect_art(Image.new("RGB", (10, 10)), vision)
+    assert found["text_prominent"] is False and require_checked(found) is True
+    assert "text_prominent" in vision.prompts[0]
+    assert "hour numerals, digits, ticks and needles on a watch, clock, compass or gauge face are normal" in vision.prompts[0]
+    missing = inspect_art(Image.new("RGB", (10, 10)), FakeVision(lambda p, i: {**BASE, "head_top": 400}))
+    assert missing["text_prominent"] is None and require_checked(missing) is True  # prominence is optional, never "unavailable"
