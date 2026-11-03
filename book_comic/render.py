@@ -41,7 +41,8 @@ class RenderOptions:
         font_path: Lettering font file for bubbles, captions and notes (default: bundled + system fonts)
         fail_on_image_error: Raise when an image call fails instead of drawing a gray placeholder
         check_art: Ask the vision model whether the art (and the character sheet) has painted-in writing or extra
-            hands or design/scene drift, with at most three draws; unchecked or rejected art raises
+            hands or design/scene drift, with at most three draws; unchecked art raises, and so does a
+            sheet or panel whose three draws all have a hard defect (a panel otherwise keeps its least-bad draw)
         chain_panels: Send the previous panel of the page as a reference, for continuity
         photo: Reference photo of the main character (http or data: URL)
         sheet_path: Where the main character's sheet is drawn once (and reused); it is then a reference
@@ -134,7 +135,7 @@ class PageRenderer:
         if self.options.check_art:
             return draw_checked(self.images, self.vision, prompt, references, aspect_ratio, size=size, framing=framing,
                                 requirements=requirements, props=self.cast.get("props", []), anchors=self.prop_anchors, audit=self.audit,
-                                on_reject=self.rejected.hook("panel", self.current_panel or 0))
+                                on_reject=self.rejected.hook("panel", self.current_panel or 0), fallback=True)
         return request_art(self.images, prompt, references, aspect_ratio)
 
     def character_sheet(self) -> Optional[str]:

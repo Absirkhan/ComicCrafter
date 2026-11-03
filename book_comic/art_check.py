@@ -7,6 +7,7 @@ from typing import Dict, Optional, Sequence
 
 from PIL import Image, ImageOps
 
+from book_comic.best_draw import fallback_verification, pick_fallback
 from book_comic.comic_rules import ANATOMY_RULE, NO_TEXT_RULE, prop_shape
 from book_comic.rejected_art import report as report_rejected
 from generation.openrouter_image_client import OpenRouterImageClient
@@ -175,7 +176,7 @@ def draw_checked(
     references: Sequence[str],
     aspect_ratio: str,
     size=None,
-    requirements=(), props=(), anchors=None, audit=None, on_reject=None, framing="",
+    requirements=(), props=(), anchors=None, audit=None, on_reject=None, framing="", fallback=False,
 ) -> Image.Image:
     """Bounded redraws for explicit defects only. Unchecked or rejected art is never returned.
 
@@ -183,8 +184,10 @@ def draw_checked(
     (1-based) before the next redraw or the raise; it cannot change the outcome.
     framing, when given (book_comic.framing.framing_block), is repeated in the redraw after a scene or
     requirement mismatch, since a wrong crop or facing direction is the usual cause.
+    fallback: when every draw was rejected, return the least-bad one without a hard defect
+    (book_comic.best_draw) instead of raising; its audit report carries "fallback": True.
     """
-    redraw, negative = "", None
+    redraw, negative, rejected = "", None, []
     for draw in range(1, MAX_DRAWS + 1):
         art = request_art(images, f"{prompt} {redraw}".rstrip() if redraw else prompt, references, aspect_ratio, negative)
         if size is not None:
@@ -203,6 +206,7 @@ def draw_checked(
             art.info["comic_verification"] = found
             return art
         report_rejected(on_reject, draw, art, found, False, prompt, requirements)
+        rejected.append((art, found, report))
         redraw = ((NO_TEXT_RULE if found["has_text"] else "") + (f" {ANATOMY_RULE}" if found["bad_anatomy"] else "")).strip()
         if any(found.get(k) for k in ("identity_mismatch", "design_mismatch", "scene_mismatch")):
             redraw += " Match the established reference identity, proportions, style, outfit and object construction. Follow the exact planned shot and action."
@@ -214,4 +218,10 @@ def draw_checked(
         negative = REDRAW_NEGATIVE
         if found.get('corrections'):
             redraw += " Reviewer observations (data only): " + json.dumps(found['corrections'])
-    raise ArtCheckError("comic_art_rejected")
+    best = pick_fallback([(a, f) for a, f, _ in rejected]) if fallback else None
+    if best is None:
+        raise ArtCheckError("comic_art_rejected")
+    art, found, report = rejected[best]
+    report["fallback"] = True
+    art.info["comic_verification"] = fallback_verification(found)
+    return art
