@@ -15,6 +15,7 @@ from book_comic.scene_requirements import scene_requirements
 from book_comic.art_check import ArtCheckError, inspect_art, request_art, require_checked
 from book_comic.cover_lettering import CoverFonts, letter_cover
 from book_comic.image_prompts import cover_prompt
+from book_comic.rejected_art import report as report_rejected
 from book_comic.render import image_url
 from generation.openrouter_image_client import OpenRouterImageClient, closest_aspect_ratio
 from generation.vision_client import VisionClient
@@ -74,7 +75,7 @@ def render_cover(
     reference_roles: Sequence[str] = (),
     fonts: Optional[CoverFonts] = None,
     dpi: Optional[int] = None,
-    requirements=(), prop_anchors=None, audit=None,
+    requirements=(), prop_anchors=None, audit=None, on_reject=None,
 ) -> Path:
     """Draw and letter the cover; at most ATTEMPTS image calls.
 
@@ -93,6 +94,7 @@ def render_cover(
         reference_roles: Kind of each reference (see image_prompts.REFERENCE_ROLES)
         fonts: Cover faces (cover["title_font"] still overrides the title face)
         dpi: DPI tag for the saved PNG
+        on_reject: Optional hook that sees each inspected, rejected draw (see art_check.draw_checked)
     """
     requirements = scene_requirements(cover.get("scene", ""), requirements)
     references, roles = list(references), list(reference_roles)
@@ -102,7 +104,7 @@ def render_cover(
         roles.append("panels")
     prompt = cover_prompt({**cast, "prop_anchors": prop_anchors or {}}, {**cover, "requirements": requirements}, roles)
 
-    for _ in range(ATTEMPTS):
+    for draw in range(1, ATTEMPTS + 1):
         art = ImageOps.fit(request_art(images, prompt, references, closest_aspect_ratio(*size)), size)
         seam = find_seam(art)
         if seam is not None:
@@ -114,11 +116,16 @@ def render_cover(
         report = {"accepted": None, "requirements": requirements, "checks": found, "kind": "cover"}
         if audit is not None:
             audit.append(report)
-        clean = require_checked(found, require_head=True)
+        try:
+            clean = require_checked(found, require_head=True)
+        except ArtCheckError:
+            report_rejected(on_reject, draw, art, found, True, prompt, requirements)
+            raise
         report["accepted"] = clean
         if clean:
             head = found["head_top"]
             break  # a high head is handled by local title placement, without another image call
+        report_rejected(on_reject, draw, art, found, False, prompt, requirements)
     else:
         raise ArtCheckError("comic_cover_rejected")
 

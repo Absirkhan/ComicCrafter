@@ -8,6 +8,7 @@ from typing import Dict, Optional, Sequence
 from PIL import Image, ImageOps
 
 from book_comic.comic_rules import ANATOMY_RULE, NO_TEXT_RULE, prop_shape
+from book_comic.rejected_art import report as report_rejected
 from generation.openrouter_image_client import OpenRouterImageClient
 from generation.vision_client import VisionClient
 
@@ -174,11 +175,15 @@ def draw_checked(
     references: Sequence[str],
     aspect_ratio: str,
     size=None,
-    requirements=(), props=(), anchors=None, audit=None,
+    requirements=(), props=(), anchors=None, audit=None, on_reject=None,
 ) -> Image.Image:
-    """Bounded redraws for explicit defects only. Unchecked or rejected art is never returned."""
+    """Bounded redraws for explicit defects only. Unchecked or rejected art is never returned.
+
+    on_reject(draw, art, found, unavailable, prompt, requirements), when given, sees each rejected draw
+    (1-based) before the next redraw or the raise; it cannot change the outcome.
+    """
     redraw, negative = "", None
-    for _ in range(MAX_DRAWS):
+    for draw in range(1, MAX_DRAWS + 1):
         art = request_art(images, f"{prompt} {redraw}".rstrip() if redraw else prompt, references, aspect_ratio, negative)
         if size is not None:
             art = ImageOps.fit(art, size, Image.Resampling.LANCZOS)
@@ -186,11 +191,16 @@ def draw_checked(
         report = {"accepted": None, "requirements": requirements, "checks": found}
         if audit is not None:
             audit.append(report)
-        clean = require_checked(found)
+        try:
+            clean = require_checked(found)
+        except ArtCheckError:
+            report_rejected(on_reject, draw, art, found, True, prompt, requirements)
+            raise
         report["accepted"] = clean
         if clean:
             art.info["comic_verification"] = found
             return art
+        report_rejected(on_reject, draw, art, found, False, prompt, requirements)
         redraw = ((NO_TEXT_RULE if found["has_text"] else "") + (f" {ANATOMY_RULE}" if found["bad_anatomy"] else "")).strip()
         if any(found.get(k) for k in ("identity_mismatch", "design_mismatch", "scene_mismatch")):
             redraw += " Match the established reference identity, proportions, style, outfit and object construction. Follow the exact planned shot and action."

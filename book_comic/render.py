@@ -14,6 +14,7 @@ from PIL.PngImagePlugin import PngInfo
 
 from book_comic.scene_requirements import scene_requirements
 from book_comic.art_check import ArtCheckError, draw_checked, request_art
+from book_comic.rejected_art import RejectedArtSaver
 from book_comic.image_prompts import NO_TEXT, panel_prompt, sheet_prompt  # noqa: F401  (NO_TEXT re-exported)
 from generation.openrouter_image_client import OpenRouterImageClient, closest_aspect_ratio
 from generation.vision_client import VisionClient
@@ -45,6 +46,8 @@ class RenderOptions:
         sheet_path: Where the main character's sheet is drawn once (and reused); it is then a reference
             for every panel. None draws no sheet
         dpi: DPI tag for saved page PNGs (e.g. PRINT_DPI); None leaves PIL's default
+        rejected_dir: When set, every draw the art check rejects (panel, cover, sheet) is saved there as
+            <stage>_p<panel>_d<draw>.png plus a .json of failed check names and reasons (at most 12 per renderer)
     """
     font_path: Optional[str] = None
     fail_on_image_error: bool = False
@@ -53,6 +56,7 @@ class RenderOptions:
     photo: Optional[str] = None
     sheet_path: Optional[Path] = None
     dpi: Optional[int] = None
+    rejected_dir: Optional[Path] = None
 
 
 def image_url(image: Image.Image) -> str:
@@ -92,6 +96,9 @@ class PageRenderer:
         self.current_panel = None
         self._diagnostic_start = 0
         self.lettering_checks = set()
+        names = [c.get(k) for c in cast.get("characters", []) for k in ("name_en", "name") if isinstance(c.get(k), str)]
+        names += [p["name"] for p in cast.get("props", []) if isinstance(p.get("name"), str)]
+        self.rejected = RejectedArtSaver(self.options.rejected_dir, names)
 
     def failure_diagnostic(self, cover=False):
         """Only fixed identifiers and scalar fields may leave private attempt diagnostics."""
@@ -125,7 +132,8 @@ class PageRenderer:
     def _art(self, prompt: str, references: List[str], aspect_ratio: str, size=None, requirements=()) -> Image.Image:
         if self.options.check_art:
             return draw_checked(self.images, self.vision, prompt, references, aspect_ratio, size=size,
-                                requirements=requirements, props=self.cast.get("props", []), anchors=self.prop_anchors, audit=self.audit)
+                                requirements=requirements, props=self.cast.get("props", []), anchors=self.prop_anchors, audit=self.audit,
+                                on_reject=self.rejected.hook("panel", self.current_panel or 0))
         return request_art(self.images, prompt, references, aspect_ratio)
 
     def character_sheet(self) -> Optional[str]:
@@ -140,7 +148,8 @@ class PageRenderer:
             prompt = sheet_prompt(self.cast, self.cast["characters"][0], ["photo"] if references else [])
             try:
                 if self.options.check_art:
-                    sheet = draw_checked(self.images, self.vision, prompt, references, "2:3", audit=self.audit)
+                    sheet = draw_checked(self.images, self.vision, prompt, references, "2:3", audit=self.audit,
+                                         on_reject=self.rejected.hook("sheet"))
                 else:
                     sheet = request_art(self.images, prompt, references, "2:3")
                 sheet.save(path)
