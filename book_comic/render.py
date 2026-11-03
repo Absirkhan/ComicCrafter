@@ -15,6 +15,7 @@ from PIL.PngImagePlugin import PngInfo
 from book_comic.scene_requirements import scene_requirements
 from book_comic.art_check import ArtCheckError, draw_checked, request_art
 from book_comic.rejected_art import RejectedArtSaver
+from book_comic.framing import framing_block
 from book_comic.image_prompts import NO_TEXT, panel_prompt, sheet_prompt  # noqa: F401  (NO_TEXT re-exported)
 from generation.openrouter_image_client import OpenRouterImageClient, closest_aspect_ratio
 from generation.vision_client import VisionClient
@@ -129,9 +130,9 @@ class PageRenderer:
         language = (self.cast.get("language") or "").lower()
         return language in RTL_LANGUAGES if language else any(is_rtl(t) for t in texts)
 
-    def _art(self, prompt: str, references: List[str], aspect_ratio: str, size=None, requirements=()) -> Image.Image:
+    def _art(self, prompt: str, references: List[str], aspect_ratio: str, size=None, requirements=(), framing="") -> Image.Image:
         if self.options.check_art:
-            return draw_checked(self.images, self.vision, prompt, references, aspect_ratio, size=size,
+            return draw_checked(self.images, self.vision, prompt, references, aspect_ratio, size=size, framing=framing,
                                 requirements=requirements, props=self.cast.get("props", []), anchors=self.prop_anchors, audit=self.audit,
                                 on_reject=self.rejected.hook("panel", self.current_panel or 0))
         return request_art(self.images, prompt, references, aspect_ratio)
@@ -188,7 +189,9 @@ class PageRenderer:
         self.current_stage = "panel"
         self._diagnostic_start = len(self.audit)
         try:
-            art = self._art(self._image_prompt(panel, tuple(roles)), references, closest_aspect_ratio(*size), size=size, requirements=requirements)
+            framing = framing_block(self.cast, panel, requirements)
+            art = self._art(self._image_prompt(panel, tuple(roles)), references, closest_aspect_ratio(*size), size=size,
+                            requirements=requirements, framing=framing)
             for prop in art.info.get("comic_verification", {}).get("prop_checks", []):
                 if prop["visible"]:
                     self.prop_anchors.setdefault(prop["name"], prop["observed"])

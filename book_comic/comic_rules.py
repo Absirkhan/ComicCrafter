@@ -63,6 +63,12 @@ NO_TEXT_RULE = (
     "not garbled glyphs. Instrument faces use geometric ticks and pointers only: no cardinal letters, digits or invented glyphs. Do not draw an empty white rectangle as a placeholder for later lettering."
 )
 
+# Every story panel: the model sometimes splits one panel into two pictures with a seam line
+SINGLE_IMAGE_RULE = (
+    "One single continuous image: no panel borders, seams, split-screen or horizontal or vertical dividing "
+    "lines across the picture."
+)
+
 
 def prop_shape(prop):
     """A stated triangular prism must not silently become an ornamental crystal rod."""
