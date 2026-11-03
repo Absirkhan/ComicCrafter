@@ -6,8 +6,9 @@ None of the lettering (captions, dialogue, titles) is ever sent to the image mod
 from typing import Dict, Sequence
 
 from book_comic.scene_requirements import scene_requirements
-from book_comic.comic_rules import ANATOMY_RULE, NO_TEXT_RULE, PANEL_RULES, props_rule
+from book_comic.comic_rules import ANATOMY_RULE, NO_TEXT_RULE, PANEL_RULES, SINGLE_IMAGE_RULE, crowd_rule, props_rule
 from book_comic.framing import detail_framing, framing_block
+from book_comic.lettering_space import lettering_space
 
 NO_TEXT = (
     "a single full-bleed illustration filling the whole canvas edge to edge: no border, no frame, "
@@ -30,6 +31,8 @@ PANEL_CRAFT = (
     "appropriate to the selected medium rather than imposing realistic 3D volume on flat styles. Keep hands "
     "anatomically plausible; when eyes are visible, direct the gaze toward the action. Avoid duplicate limbs, merged objects and extra "
     "copies of a character. Do not invent scars, moles, jewelry or costume changes that are not described. "
+    "No accessories beyond the approved appearance (gloves, jewellery, necklaces, pendants, watches, hats, bags) "
+    "unless the scene introduces them. "
     f"{ANATOMY_RULE}"
 )
 
@@ -74,11 +77,7 @@ def panel_prompt(cast: Dict, panel: Dict, people: str, roles: Sequence[str] = ()
     crop = framing_block(cast, panel, requirements)
     if detail_framing(requirements):
         people = "Only the specified limb is visible. Preserve its skin, age and relevant clothing details from references; do not draw the whole character."
-    lettering_space = SPLASH if splash else ""
-    if not splash and (panel.get('caption') or any(d.get('text') for d in panel.get('dialogue', []))):
-        lettering_space = ("Stage the focal action below the upper third of the canvas. Keep that upper third clear of faces, "
-                           "important hands and focal props for later lettering; fill it with continuous natural scenery such as "
-                           "sky, haze or a wall. This is one full-bleed illustration, never a blank strip, inset, seam or text box.\n")
+    calm_area = SPLASH if splash else lettering_space(panel, requirements)
     kind = "Full-page comic splash panel" if splash else "Comic book panel"
     previous = ""
     if "previous" in roles:
@@ -88,13 +87,13 @@ def panel_prompt(cast: Dict, panel: Dict, people: str, roles: Sequence[str] = ()
             "Preserve world continuity while changing the pose and framing to match this scene. "
         )
     return (
-        f"{crop}{lettering_space}{kind}. Art style: {cast.get('style', 'detailed comic book art')}.\n"
+        f"{crop}{calm_area}{kind}. Art style: {cast.get('style', 'detailed comic book art')}.\n"
         f"Scene: {panel['scene']}\n"
         f"Characters (draw exactly as described): {people or 'none'}\n"
-        f"{describe_references(roles)}{previous}{PANEL_CRAFT}{PANEL_RULES}{props_rule(cast)}"
+        f"{crowd_rule(panel['scene'])}{describe_references(roles)}{previous}{PANEL_CRAFT}{PANEL_RULES}{props_rule(cast)}"
         f"{acceptance_prompt(requirements, cast.get('prop_anchors'))}"
         "Keep the requested shot distance and all focal action visible. "
-        "Use real scenery, never an empty rectangle.\n"
+        f"Use real scenery, never an empty rectangle. {SINGLE_IMAGE_RULE}\n"
         f"Strictly {NO_TEXT}. {NO_TEXT_RULE}"
     )
 

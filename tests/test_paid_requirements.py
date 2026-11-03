@@ -51,8 +51,8 @@ def test_lettered_panel_reserves_natural_background_without_sending_its_words():
     prompt = panel_prompt({'characters': [], 'style': 'ink'},
                           {'scene': 'Close-up: Hero checks a device.', 'caption': 'PRIVATE_CAPTION',
                            'dialogue': [{'text': 'PRIVATE_DIALOGUE'}]}, 'Hero: teal blazer')
-    assert 'upper third clear of faces' in prompt
-    assert 'continuous natural scenery' in prompt
+    assert 'CALM AREA: keep the requested crop; the head may reach into the upper third' in prompt
+    assert 'one full-bleed illustration, never a blank strip' in prompt
     assert 'PRIVATE_CAPTION' not in prompt and 'PRIVATE_DIALOGUE' not in prompt
 
 
