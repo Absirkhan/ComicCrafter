@@ -175,12 +175,14 @@ def draw_checked(
     references: Sequence[str],
     aspect_ratio: str,
     size=None,
-    requirements=(), props=(), anchors=None, audit=None, on_reject=None,
+    requirements=(), props=(), anchors=None, audit=None, on_reject=None, framing="",
 ) -> Image.Image:
     """Bounded redraws for explicit defects only. Unchecked or rejected art is never returned.
 
     on_reject(draw, art, found, unavailable, prompt, requirements), when given, sees each rejected draw
     (1-based) before the next redraw or the raise; it cannot change the outcome.
+    framing, when given (book_comic.framing.framing_block), is repeated in the redraw after a scene or
+    requirement mismatch, since a wrong crop or facing direction is the usual cause.
     """
     redraw, negative = "", None
     for draw in range(1, MAX_DRAWS + 1):
@@ -205,6 +207,8 @@ def draw_checked(
         if any(found.get(k) for k in ("identity_mismatch", "design_mismatch", "scene_mismatch")):
             redraw += " Match the established reference identity, proportions, style, outfit and object construction. Follow the exact planned shot and action."
         failed = [r for r in found.get("requirement_checks", []) if not r["matches"]]
+        if framing and (found.get("scene_mismatch") or found.get("requirement_mismatch")):
+            redraw += " Repeat of the required framing: " + " ".join(framing.split())
         if found.get("requirement_mismatch") or found.get("prop_mismatch") or found.get("prop_shape_mismatch"):
             redraw += " Correct the exact visible states and canonical prop details. " + json.dumps({"required": requirements, "canonical": anchors or {}, "observed_errors": failed})
         negative = REDRAW_NEGATIVE
