@@ -122,3 +122,21 @@ def test_reasons_are_trimmed_and_capped_at_eight(tmp_path):
     saver.save("panel", 1, 1, Image.new("RGB", (4, 4)), found)
     reasons = records(tmp_path)["panel_p1_d1.json"]["reasons"]
     assert len(reasons) == 8 and reasons[0] == "x" * 300
+
+
+def test_a_one_word_requirement_answer_reads_expected_versus_seen(tmp_path):
+    out = tmp_path / "rejected"
+    requirements = [{"subject": "the journal", "attribute": "state", "expected": "open"},
+                    {"subject": "Hero", "attribute": "framing", "expected": "hand_detail_only"},
+                    {"subject": "Dana", "attribute": "design", "expected": "teal blazer"}]
+    answer = {**CLEAN, "requirement_mismatch": True,
+              "requirement_checks": [{"index": 0, "observed": "closed", "matches": False},
+                                     {"index": 1, "observed": "body_visible", "matches": False},
+                                     {"index": 2, "observed": "military jacket", "matches": False}]}
+    draws = iter([answer, {k: v for k, v in CLEAN.items() if k not in ("requirement_checks", "prop_checks")}])  # FakeVision fills a shared CLEAN in place
+    saver = RejectedArtSaver(out, names=["Dana"])
+    draw_checked(FakeImages(colours("red", "blue")), FakeVision(lambda p, i: next(draws)), SCENE, [], "2:3",
+                 requirements=requirements, on_reject=saver.hook("panel", 2))
+    reasons = records(out)["panel_p2_d1.json"]["reasons"]
+    assert reasons == ["state: expected open, saw closed", "framing: expected hand detail only, saw body visible", "military jacket"]
+    assert "journal" not in json.dumps(reasons) and "teal blazer" not in json.dumps(reasons)
