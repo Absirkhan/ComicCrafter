@@ -40,6 +40,14 @@ def test_medium_shots_and_close_ups_never_ask_for_a_clear_upper_third(scene):
     assert "the head may reach into the upper third" in prompt and "never lower, shrink or re-crop" in prompt
 
 
+def test_wide_shots_never_ask_for_a_band_or_an_upper_third():
+    # Production 2026-11-03: "simple scenery across the upper third" drew a box or a seam across the top.
+    for scene in ("Wide shot: Hero waits by the gate.", "Extreme long shot: Hero crosses the valley."):
+        prompt = prompt_for(scene)
+        assert BAND in prompt and "carries on up to the top edge" in prompt
+        assert not any(word in BAND for word in ("third", "band", "across the"))
+
+
 @pytest.mark.parametrize("line", [BAND, SIDE, CORNER])
 def test_the_calm_area_is_scenery_of_the_same_scene_never_a_measured_strip(line):
     # Live check 2026-11-03: "one side, about two-fifths of its width, calm" drew a blank strip with a seam.
