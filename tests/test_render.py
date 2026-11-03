@@ -169,7 +169,7 @@ def test_only_redraws_carry_the_negative_prompt():
 ])
 def test_more_than_two_hands_per_person_is_bad_anatomy(answer, bad):
     found = inspect_art(Image.new("RGB", (2000, 1000)), FakeVision(lambda p, i: answer))
-    assert found["bad_anatomy"] is bad and set(found) == {"head_top", "has_text", "bad_anatomy"}
+    assert found["bad_anatomy"] is bad and set(found) == {"head_top", "text_prominent", "has_text", "bad_anatomy"}
 
 
 def test_the_sheet_is_redrawn_when_flagged_and_drawn_once_when_clean(tmp_path):
