@@ -1,9 +1,9 @@
 """Best-of-draws fallback: when every bounded draw of a panel was rejected, keep the least-bad one.
 
-Only draws without a hard defect qualify. Prominent painted-in writing (readable foreground words, writing on
-the hero or a key prop, fake bubbles or captions, a signature), broken anatomy and a different face are what a
-reader notices at once, so a draw with any of them is never published. Small background pseudo-lettering
-(text_prominent False) is soft: still redrawn, but a kept draw may carry it. The rest (scene, design,
+Only draws without a hard defect qualify. Readable painted-in writing (letters or words large enough to read,
+fake bubbles or captions, a signature), broken anatomy and a different face are what a reader notices at once, so a
+draw with any of them is never published. Tiny or illegible pseudo-lettering (text_prominent False), even on a map
+or page the hero holds, is soft: still redrawn, but a kept draw may carry it. The rest (scene, design,
 requirement and prop drift) is ranked: fewest failed check flags first, then fewest failed requirement
 checks, then the earliest draw.
 """

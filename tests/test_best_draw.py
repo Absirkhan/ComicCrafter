@@ -144,6 +144,7 @@ def test_the_check_asks_for_text_prominence_and_allows_dial_numerals():
     found = inspect_art(Image.new("RGB", (10, 10)), vision)
     assert found["text_prominent"] is False and require_checked(found) is True
     assert "text_prominent" in vision.prompts[0]
+    assert "including on a map, page, document or sign the hero holds or studies" in vision.prompts[0]
     assert "hour numerals, digits, ticks and needles on a watch, clock, compass or gauge face are normal" in vision.prompts[0]
     missing = inspect_art(Image.new("RGB", (10, 10)), FakeVision(lambda p, i: {**BASE, "head_top": 400}))
     assert missing["text_prominent"] is None and require_checked(missing) is True  # prominence is optional, never "unavailable"

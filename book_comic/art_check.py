@@ -47,10 +47,10 @@ def inspect_art(image: Image.Image, vision: VisionClient, references=(), context
     small = image.copy()
     small.thumbnail((2048, 2048))
     prompt = INSPECT_PROMPT + " Inspect instrument dials closely: words, cardinal letters (N, E, S, W) and invented letter-like markings count as has_text even when tiny; hour numerals, digits, ticks and needles on a watch, clock, compass or gauge face are normal and do not."
-    prompt += (" Also return text_prominent: true only when has_text is true and the writing is prominent: large or readable words "
-               "in the foreground, writing on the main character or a key prop, a speech bubble or caption box, or a signature or watermark. "
-               "Return text_prominent false when the only writing is small background pseudo-lettering (distant signs, posters, graffiti, "
-               "map or page marks), and false when has_text is false.")
+    prompt += (" Also return text_prominent: true only when has_text is true and the writing is readable or stands out as writing: "
+               "real letters or words large enough to read, a speech bubble or caption box, or a signature or watermark. "
+               "Return text_prominent false when the only writing is tiny or illegible pseudo-lettering, scribbles or marks, wherever it is, "
+               "including on a map, page, document or sign the hero holds or studies, and false when has_text is false.")
     if context:
         prompt += (
             " The FIRST attached image is the candidate; inspect only it for unwanted writing and anatomy. "
