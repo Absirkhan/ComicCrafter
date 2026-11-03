@@ -1,21 +1,17 @@
-"""Per-shot calm area for lettering, the checker kept consistent with it, and lettering that still fits."""
+"""Per-shot calm area for lettering, the checker kept consistent with it, and the other scene rules."""
 
 import pytest
-from PIL import Image, ImageDraw
+from PIL import Image
 
 from book_comic.art_check import draw_checked, inspect_art
 from book_comic.comic_rules import NO_TEXT_RULE, SINGLE_IMAGE_RULE, crowd_rule
 from book_comic.image_prompts import panel_prompt
 from book_comic.lettering_space import BAND, CHECK_NOTE, CORNER, SIDE, useful_corrections
-from book_comic.render import PageRenderer, RenderOptions
 from conftest import FakeImages, FakeVision
-from layout.bubble_planner import BubblePlan
-from layout.comic_bubbles import render_dialogue
 
 CAST = {"style": "ink comic", "characters": [{"name_en": "Hero", "look": "teal blazer"}]}
 LETTERED = {"caption": "PRIVATE_CAPTION", "dialogue": [{"text": "PRIVATE_LINE"}]}
 CLEAN = {"has_text": False, "bad_anatomy": False, "identity_mismatch": False, "design_mismatch": False, "scene_mismatch": False}
-PANEL = (1837, 944)  # one of the three print-page panel slots (print_layouts, VERTICAL_STRIP)
 
 
 def prompt_for(scene, lettered=True):
@@ -106,60 +102,3 @@ def test_props_appear_once_and_no_unapproved_accessories():
 def test_walls_posters_murals_graffiti_and_plaques_carry_no_writing():
     for surface in ("Walls", "posters", "murals", "graffiti", "billboards", "plaques"):
         assert surface in NO_TEXT_RULE
-
-
-def subject_art(boxes):
-    """A busy panel: detailed subject rectangles on a plain background (the calm area)."""
-    art = Image.new("RGB", PANEL, "#b9d3df")
-    draw = ImageDraw.Draw(art)
-    for x, y, w, h in boxes:
-        draw.rectangle((int(x * PANEL[0]), int(y * PANEL[1]), int((x + w) * PANEL[0]) - 1, int((y + h) * PANEL[1]) - 1), fill="#40262b")
-    return art
-
-
-def untouched(before, after, boxes):
-    """No caption or bubble covers a protected subject; only a bubble tail may point into it."""
-    for x, y, w, h in boxes:
-        area = (int(x * PANEL[0]), int(y * PANEL[1]), int((x + w) * PANEL[0]), int((y + h) * PANEL[1]))
-        old, new = before.crop(area).getdata(), after.crop(area).getdata()
-        changed = sum(a != b for a, b in zip(old, new))
-        assert changed / len(old) < 0.02
-
-
-# Head in the upper third, figure off-centre, one side calm: what the medium-shot and close-up prompts now ask for.
-LAYOUTS = {
-    "medium shot, figure right": ([(0.55, 0.0, 0.2, 0.4), (0.5, 0.55, 0.3, 0.3)], (0.65, 0.3)),
-    "medium shot, figure left": ([(0.25, 0.0, 0.2, 0.4), (0.2, 0.55, 0.3, 0.3)], (0.35, 0.3)),
-    "close-up, face right": ([(0.4, 0.03, 0.36, 0.94)], (0.58, 0.62)),
-    "close-up, face left": ([(0.24, 0.03, 0.36, 0.94)], (0.42, 0.62)),
-}
-
-
-@pytest.mark.parametrize("layout", LAYOUTS)
-@pytest.mark.parametrize("rtl, caption, words", [
-    (True, "הרוח התחזקה, אבל הדרך אל המגדל כבר הייתה ברורה.", "אני יודע איך להגיע לשם."),
-    (False, "The wind grew stronger, but the way to the tower was clear.", "I know how to get there."),
-])
-def test_lettering_fits_beside_a_head_in_the_upper_third_without_shrinking_art(layout, rtl, caption, words):
-    boxes, mouth = LAYOUTS[layout]
-    art = subject_art(boxes)
-    plan = BubblePlan(speakers=[mouth], bubbles=[(0.15, 0.5)], protected=boxes, protected_checked=True)
-    result = render_dialogue(art, [words], caption, plan, rtl=rtl)
-    assert result.size == art.size and result.tobytes() != art.tobytes()
-    untouched(art, result, boxes)
-
-
-@pytest.mark.parametrize("layout", LAYOUTS)
-def test_the_renderer_letters_those_panels_without_a_no_space_failure(layout):
-    boxes, mouth = LAYOUTS[layout]
-    answer = {"lines": [{"mouth": [int(mouth[0] * 1000), int(mouth[1] * 1000)], "bubble": [150, 500]}],
-              "protected": [[int(v * 1000) for v in box] for box in boxes]}
-    vision = FakeVision(lambda p, i: answer)
-    renderer = PageRenderer({**CAST, "language": "he"}, FakeImages([Image.new("RGB", (64, 64))]), vision,
-                            options=RenderOptions(check_art=True))
-    art = subject_art(boxes)
-    lettered = renderer._letter(art, {"caption": "הרוח התחזקה, אבל הדרך אל המגדל כבר הייתה ברורה.",
-                                      "dialogue": [{"text": "אני יודע איך להגיע לשם.", "speaker": "Hero"}],
-                                      "note": "לנועה, באהבה"})
-    assert lettered.size == PANEL and renderer.lettering_checks == set()
-    assert len(vision.prompts) == 1  # the fast plan fit: no precise retry

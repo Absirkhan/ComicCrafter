@@ -22,7 +22,7 @@ BAND = (
 SIDE = (
     "CALM AREA: keep the requested crop; the head may reach into the upper third of the frame, so never "
     "lower, shrink or re-crop the figure to make room. Instead place the figure slightly off-centre so that one "
-    "side of the frame, about one third of its width, is calm, low-detail background (plain wall, sky, haze or "
+    "side of the frame, about two-fifths of its width, is calm, low-detail background (plain wall, sky, haze or "
     "soft shadow) with no face, hand or focal prop in it."
 )
 CORNER = (

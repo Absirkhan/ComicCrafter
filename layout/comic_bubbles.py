@@ -212,8 +212,11 @@ def _render_dialogue_once(
 def render_dialogue(image, dialogue, caption, plan, kinds=None, rtl=None, font_path=None, reserved=(), type_height=None):
     """Try alternative readable text shapes on fresh copies; never shrink or crop artwork.
 
-    type_height sizes the type as for a panel of that height, so a full-page splash letters like a strip panel."""
-    for wrap_share, caption_width in ((None, 0.46), (0.45, 0.65), (0.62, 0.88)):
+    type_height sizes the type as for a panel of that height, so a full-page splash letters like a strip panel.
+    Wider shapes suit a calm band; the last, narrow shape (same font size, more lines) suits one calm side
+    beside a close-up's face (book_comic/lettering_space.py).
+    """
+    for wrap_share, caption_width in ((None, 0.46), (0.45, 0.65), (0.62, 0.88), (0.24, 0.34)):
         try:
             return _render_dialogue_once(image, dialogue, caption, plan, kinds, rtl, font_path,
                                          reserved, wrap_share, caption_width, type_height)
