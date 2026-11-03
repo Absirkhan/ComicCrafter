@@ -1,7 +1,8 @@
 """Opt-in record of art the vision check rejected, for reviewing why images fail.
 
 Each rejected draw becomes <stage>_p<panel>_d<draw>.png and a .json beside it holding only fixed
-check names and the vision check's own short observations of the failed checks. Prompt text,
+check names and the vision check's own short observations of the failed checks. A rejected draw the
+renderer kept anyway (book_comic.best_draw fallback) gets "selected": true in its .json. Prompt text,
 requirement text and character names never reach the JSON. Saving never changes the render.
 """
 
@@ -37,12 +38,29 @@ def _requirement_failed(check: Dict, requirement: Dict) -> bool:
             or (requirement.get("attribute") in ("hand", "framing") and observed != expected))
 
 
+# The checker's fixed answers for pose, state, hand side and framing: safe to show next to each other.
+VOCABULARY = {"standing", "kneeling", "seated", "crouching", "open", "closed", "flat", "upright", "right", "left",
+              "ambiguous", "not_visible", "hand_detail_only", "feet_detail_only", "body_visible"}
+VOCABULARY_ATTRIBUTES = ("pose", "state", "hand", "framing")
+
+
+def _requirement_reason(check: Dict, requirement: Dict) -> object:
+    """"state: expected open, saw closed" when both sides are fixed vocabulary; otherwise the observation as written."""
+    observed = check.get("observed")
+    expected = str(requirement.get("expected", "")).strip().lower()
+    seen = str(observed or "").strip().lower()
+    attribute = requirement.get("attribute")
+    if attribute in VOCABULARY_ATTRIBUTES and expected in VOCABULARY and seen in VOCABULARY:
+        return f"{attribute}: expected {expected.replace('_', ' ')}, saw {seen.replace('_', ' ')}"
+    return observed
+
+
 def _candidates(found: Dict, requirements: Sequence[Dict]) -> Iterable[object]:
     if found.get("requirement_mismatch"):
         for check in found.get("requirement_checks") or []:
             index = check.get("index") if isinstance(check, dict) else None
             if type(index) is int and 0 <= index < len(requirements) and _requirement_failed(check, requirements[index]):
-                yield check.get("observed")
+                yield _requirement_reason(check, requirements[index])
     if found.get("prop_mismatch") or found.get("prop_shape_mismatch"):
         for check in found.get("prop_checks") or []:
             if isinstance(check, dict) and check.get("visible") is True and check.get("matches") is False:
@@ -92,6 +110,24 @@ class RejectedArtSaver:
             self.save(stage, panel, draw, art, found, unavailable, prompt, requirements)
         return on_reject
 
+    def select_hook(self, stage: str, panel: int = 0):
+        """A callback marking which rejected draw of one loop was kept, or None when nothing is recorded."""
+        if self.directory is None:
+            return None
+        return lambda draw: self.mark_selected(stage, panel, draw)
+
+    def mark_selected(self, stage, panel, draw) -> None:
+        """Add "selected": true to a saved draw's .json; a draw that was not saved is left alone."""
+        path = self.directory / f"{stage}_p{int(panel)}_d{int(draw)}.json" if self.directory else None
+        try:
+            if path is None or not path.is_file():
+                return
+            record = json.loads(path.read_text(encoding="utf-8"))
+            record["selected"] = True
+            path.write_text(json.dumps(record, ensure_ascii=False), encoding="utf-8")
+        except Exception as e:  # never let review bookkeeping change the render
+            logger.debug(f"Could not mark the selected draw: {e}")
+
     def save(self, stage, panel, draw, art, found, unavailable=False, prompt="", requirements=()) -> None:
         if self.directory is None or self.saved >= self.limit:
             return
@@ -116,3 +152,13 @@ def report(on_reject, draw, art, found, unavailable=False, prompt="", requiremen
         on_reject(draw, art, found, unavailable, prompt, requirements)
     except Exception as e:
         logger.debug(f"Rejected-art hook failed: {e}")
+
+
+def report_selected(on_select, draw) -> None:
+    """Call an optional selected-draw hook without ever raising."""
+    if on_select is None:
+        return
+    try:
+        on_select(draw)
+    except Exception as e:
+        logger.debug(f"Selected-draw hook failed: {e}")

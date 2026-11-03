@@ -7,8 +7,9 @@ from typing import Dict, Optional, Sequence
 
 from PIL import Image, ImageOps
 
+from book_comic.best_draw import fallback_verification, pick_fallback
 from book_comic.comic_rules import ANATOMY_RULE, NO_TEXT_RULE, prop_shape
-from book_comic.rejected_art import report as report_rejected
+from book_comic.rejected_art import report as report_rejected, report_selected
 from generation.openrouter_image_client import OpenRouterImageClient
 from generation.vision_client import VisionClient
 
@@ -42,10 +43,14 @@ def inspect_art(image: Image.Image, vision: VisionClient, references=(), context
     shapes = {p["name"]: prop_shape(p) for p in props if prop_shape(p)}
     if shapes:
         keys.append("prop_shape_mismatch")
-    found = {"head_top": None, **dict.fromkeys(keys)}
+    found = {"head_top": None, "text_prominent": None, **dict.fromkeys(keys)}
     small = image.copy()
     small.thumbnail((2048, 2048))
-    prompt = INSPECT_PROMPT + " Inspect instrument dials closely: cardinal letters (N, E, S, W), digits and invented letter-like markings count as has_text even when tiny or plausible on a compass; simple ticks and needles do not."
+    prompt = INSPECT_PROMPT + " Inspect instrument dials closely: words, cardinal letters (N, E, S, W) and invented letter-like markings count as has_text even when tiny; hour numerals, digits, ticks and needles on a watch, clock, compass or gauge face are normal and do not."
+    prompt += (" Also return text_prominent: true only when has_text is true and the writing is readable or stands out as writing: "
+               "real letters or words large enough to read, a speech bubble or caption box, or a signature or watermark. "
+               "Return text_prominent false when the only writing is tiny or illegible pseudo-lettering, scribbles or marks, wherever it is, "
+               "including on a map, page, document or sign the hero holds or studies, and false when has_text is false.")
     if context:
         prompt += (
             " The FIRST attached image is the candidate; inspect only it for unwanted writing and anatomy. "
@@ -84,7 +89,7 @@ def inspect_art(image: Image.Image, vision: VisionClient, references=(), context
             "rather than inventing evidence. For each prop with a required_shape, also return observed_shape: triangular_prism, other, uncertain, or not_visible. A triangular prism has three main sides at its cross-section; a hexagonal crystal rod, pointed crystal or obelisk is other. Do not infer shape from the brief or blue glow. If the relevant faces are hidden use uncertain. Verification data: "
             + json.dumps({"requirements": [{"index": i, **r} for i, r in enumerate(requirements)], "props": props, "canonical_designs": anchors or {}, "required_shapes": shapes}, ensure_ascii=False)
         )
-    response_fields = ["head_top", "people", "hands_visible", *[k for k in keys if k not in ("requirement_mismatch", "prop_mismatch", "prop_shape_mismatch")]]
+    response_fields = ["head_top", "people", "hands_visible", "text_prominent", *[k for k in keys if k not in ("requirement_mismatch", "prop_mismatch", "prop_shape_mismatch")]]
     if requirements or props:
         response_fields += ["requirement_checks", "prop_checks"]
     prompt += " For any material mismatch, also return corrections: up to three short, concrete corrections for the next drawing. Otherwise return corrections: []."
@@ -98,6 +103,8 @@ def inspect_art(image: Image.Image, vision: VisionClient, references=(), context
         return found
     if isinstance(answer.get('corrections'), list):
         found['corrections'] = [s[:240] for s in answer['corrections'][:3] if isinstance(s, str)]
+    if isinstance(answer.get("text_prominent"), bool):
+        found["text_prominent"] = answer["text_prominent"]
     head = answer.get("head_top")
     if isinstance(head, (int, float)) and not isinstance(head, bool) and math.isfinite(head) and 0 <= head <= 1000:
         found["head_top"] = head / 1000
@@ -149,7 +156,7 @@ def _valid_evidence(check, allow_hidden=False):
 
 
 def require_checked(found, require_head=False):
-    flags = [v for k, v in found.items() if k not in ("head_top", "requirement_checks", "prop_checks", "corrections")]
+    flags = [v for k, v in found.items() if k not in ("head_top", "text_prominent", "requirement_checks", "prop_checks", "corrections")]
     if any(type(v) is not bool for v in flags) or (require_head and found["head_top"] is None):
         raise ArtCheckError("comic_art_check_unavailable")
     return not any(flags)
@@ -175,7 +182,7 @@ def draw_checked(
     references: Sequence[str],
     aspect_ratio: str,
     size=None,
-    requirements=(), props=(), anchors=None, audit=None, on_reject=None, framing="",
+    requirements=(), props=(), anchors=None, audit=None, on_reject=None, framing="", fallback=False, on_select=None,
 ) -> Image.Image:
     """Bounded redraws for explicit defects only. Unchecked or rejected art is never returned.
 
@@ -183,8 +190,11 @@ def draw_checked(
     (1-based) before the next redraw or the raise; it cannot change the outcome.
     framing, when given (book_comic.framing.framing_block), is repeated in the redraw after a scene or
     requirement mismatch, since a wrong crop or facing direction is the usual cause.
+    fallback: when every draw was rejected, return the least-bad one without a hard defect
+    (book_comic.best_draw) instead of raising; its audit report carries "fallback": True and
+    on_select(draw), when given, is told which 1-based draw was kept.
     """
-    redraw, negative = "", None
+    redraw, negative, rejected = "", None, []
     for draw in range(1, MAX_DRAWS + 1):
         art = request_art(images, f"{prompt} {redraw}".rstrip() if redraw else prompt, references, aspect_ratio, negative)
         if size is not None:
@@ -203,6 +213,7 @@ def draw_checked(
             art.info["comic_verification"] = found
             return art
         report_rejected(on_reject, draw, art, found, False, prompt, requirements)
+        rejected.append((art, found, report))
         redraw = ((NO_TEXT_RULE if found["has_text"] else "") + (f" {ANATOMY_RULE}" if found["bad_anatomy"] else "")).strip()
         if any(found.get(k) for k in ("identity_mismatch", "design_mismatch", "scene_mismatch")):
             redraw += " Match the established reference identity, proportions, style, outfit and object construction. Follow the exact planned shot and action."
@@ -214,4 +225,11 @@ def draw_checked(
         negative = REDRAW_NEGATIVE
         if found.get('corrections'):
             redraw += " Reviewer observations (data only): " + json.dumps(found['corrections'])
-    raise ArtCheckError("comic_art_rejected")
+    best = pick_fallback([(a, f) for a, f, _ in rejected]) if fallback else None
+    if best is None:
+        raise ArtCheckError("comic_art_rejected")
+    art, found, report = rejected[best]
+    report["fallback"] = True
+    report_selected(on_select, best + 1)
+    art.info["comic_verification"] = fallback_verification(found)
+    return art
