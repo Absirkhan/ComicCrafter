@@ -46,8 +46,10 @@ CHECK_NOTE = (
     " CALM AREA lines in the brief are soft guidance for a later lettering step: never set scene_mismatch "
     "and never write a correction about head height, the upper third, lowering or shrinking a figure for lettering "
     "clearance, or empty space for text. Shot fractions are approximate: a wide-shot figure filling up to about "
-    "three-quarters of the height with the head and feet visible is still a wide shot; an extreme long shot whose "
-    "figure is taller than about one-quarter of the image height is still wrong."
+    "three-quarters of the height with the head and feet visible is still a wide shot; an extreme long shot is "
+    "right while the surroundings dominate and the figure is a small full figure up to about one-third of the image "
+    "height, and wrong only when the figure is taller than that or cropped. Facing direction alone is never a reason "
+    "to fail an extreme long shot."
 )
 LETTERING_CORRECTION = re.compile(
     r"\b(?:upper|top) third\b|\blettering (?:clearance|space|area|band)\b|\bclear(?:ance)? for (?:text|lettering|captions?)\b",

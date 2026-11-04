@@ -16,7 +16,7 @@ CLEAN = {"has_text": False, "bad_anatomy": False, "identity_mismatch": False, "d
 
 
 @pytest.mark.parametrize("scene, opening, phrase", [
-    ("Extreme long shot: Hero crosses the valley.", "EXTREME LONG SHOT:", "taller than one-quarter of the image height is wrong"),
+    ("Extreme long shot: Hero crosses the valley.", "EXTREME LONG SHOT:", "a tiny full figure about one-tenth of the image height"),
     ("Wide shot: Hero waits at the bus stop.", "WIDE SHOT:", "from the top of the head to the feet"),
     ("Medium shot: Hero argues with the clerk.", "MEDIUM SHOT: crop at the waist.", "hips, legs and feet are outside the frame"),
     ("Close-up: Hero's face, eyes wide.", "CLOSE-UP:", "head and shoulders only"),

@@ -7,7 +7,7 @@ from typing import Dict, Optional, Sequence
 
 from PIL import Image, ImageOps
 
-from book_comic.best_draw import fallback_verification, pick_fallback
+from book_comic.best_draw import fallback_verification, pick_fallback, unasked_gloves
 from book_comic.comic_rules import ANATOMY_RULE, NO_TEXT_RULE, SEAM_CORRECTION, SINGLE_IMAGE_RULE, prop_shape
 from book_comic.lettering_space import CHECK_NOTE, useful_corrections
 from book_comic.margins import MARGIN_CORRECTION, target_aspect, trim_margins
@@ -160,7 +160,7 @@ def _valid_evidence(check, allow_hidden=False):
 
 
 def require_checked(found, require_head=False):
-    flags = [v for k, v in found.items() if k not in ("head_top", "text_prominent", "requirement_checks", "prop_checks", "corrections", "seam")]
+    flags = [v for k, v in found.items() if k not in ("head_top", "text_prominent", "requirement_checks", "prop_checks", "corrections", "seam", "gloves")]
     if any(type(v) is not bool for v in flags) or (require_head and found["head_top"] is None):
         raise ArtCheckError("comic_art_check_unavailable")
     return not any(flags)
@@ -212,6 +212,8 @@ def draw_checked(
         found = inspect_art(art, vision, references=references, context=prompt, requirements=requirements, props=props, anchors=anchors)
         if margins == "redraw":
             found = {**found, "scene_mismatch": True, "corrections": [*(found.get("corrections") or []), MARGIN_CORRECTION]}
+        if unasked_gloves(found, prompt):
+            found = {**found, "gloves": True}
         report = {"accepted": None, "requirements": requirements, "checks": found}
         if audit is not None:
             audit.append(report)
