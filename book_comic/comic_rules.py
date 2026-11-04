@@ -61,7 +61,16 @@ NO_TEXT_RULE = (
     "Absolutely no writing anywhere in the image: no letters, words, captions, labels, signs, speech "
     "bubbles, empty caption boxes or sound-effect lettering. Objects that usually carry writing have plain surfaces, "
     "not garbled glyphs. Walls, posters, murals, graffiti, billboards and plaques are plain paint, texture or simple "
-    "pictures with no letters or letter-like marks. Instrument faces use geometric ticks and pointers only: no cardinal letters, digits or invented glyphs. Do not draw an empty white rectangle as a placeholder for later lettering."
+    "pictures with no letters or letter-like marks. Neon signs, shop signs, screens and holograms are abstract glowing "
+    "shapes, stripes, arrows or simple icons, never letters, words, numbers or letter-like glyphs. Instrument faces use geometric ticks and pointers only: no cardinal letters, digits or invented glyphs. Do not draw an empty white rectangle as a placeholder for later lettering."
+)
+
+# Every story panel: the model drifts the hero into tactical or military gear the sheet does not have
+OUTFIT_LOCK = (
+    "Outfit lock: every character wears exactly the outfit described above and shown on the character sheet, "
+    "unchanged from panel to panel. Do not add tactical or combat gear: no tactical, armoured or fingerless gloves, "
+    "no body armour, plate carriers or tactical vests, no holsters, utility belts, harnesses or military uniforms, "
+    "unless the character's description, a listed prop or the scene names them. "
 )
 
 # Every story panel: the model sometimes splits one panel into two pictures with a seam line

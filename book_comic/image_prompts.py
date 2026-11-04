@@ -6,7 +6,7 @@ None of the lettering (captions, dialogue, titles) is ever sent to the image mod
 from typing import Dict, Sequence
 
 from book_comic.scene_requirements import scene_requirements
-from book_comic.comic_rules import ANATOMY_RULE, NO_TEXT_RULE, PANEL_RULES, SINGLE_IMAGE_RULE, crowd_rule, props_rule
+from book_comic.comic_rules import ANATOMY_RULE, NO_TEXT_RULE, OUTFIT_LOCK, PANEL_RULES, SINGLE_IMAGE_RULE, crowd_rule, props_rule
 from book_comic.framing import detail_framing, framing_block
 from book_comic.lettering_space import lettering_space
 
@@ -33,7 +33,7 @@ PANEL_CRAFT = (
     "copies of a character. Do not invent scars, moles, jewelry or costume changes that are not described. "
     "No accessories beyond the approved appearance (gloves, jewellery, necklaces, pendants, watches, hats, bags) "
     "unless the scene introduces them. "
-    f"{ANATOMY_RULE}"
+    f"{OUTFIT_LOCK}{ANATOMY_RULE}"
 )
 
 
