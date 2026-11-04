@@ -5,9 +5,13 @@ import re
 _HAND_FOCUS = re.compile(
     r"\b(hands?)[ -]detail\b|\bdetail (?:shot )?of (?:\w+'s |his |her |their |the |a |one )?(?:right |left )?(hands?)\b"
     r"|\bclose-up of (?:\w+'s |his |her |their |the |a |one )?(?:right |left )?(hands?)\b"
-    r"|^\s*(?:extreme )?close-up:\s*(?:\w+'s|his|her|their|the|one)\s+(?:right |left )?(hands?)\b", re.I)
+    r"|^\s*(?:extreme )?close-up(?::| on| of)\s*(?:\w+'s|his|her|their|the|one|a)\s+(?:right |left |gloved |bare |open |clenched )?"
+    r"(hands?|fingers?|fingertips?|palms?|fists?|wrists?|feet|foot|toes?|boots?|shoes?|sneakers?|sandals?)\b", re.I)
+# A limb-detail word and the crop it asks for: hands, fingers, palms, fists and wrists are a hand detail; feet,
+# toes and footwear a feet detail.
+_FEET_WORDS = re.compile(r"^(?:feet|foot|toes?|boots?|shoes?|sneakers?|sandals?)$", re.I)
 # The host appends a character direction ("Expression and body language: ... the face when visible ...") to
-# every scene; it describes the hero in general, not what this crop shows, so it never cancels a hand detail.
+# every scene; it describes the hero in general, not what this crop shows, so it never cancels a limb detail.
 _DIRECTION = re.compile(r"\bExpression and body language:", re.I)
 _BODY_WORDS = re.compile(r"\b(face|faces|head|eyes|torso|chest|shoulders?|waist|body|expression|smile|smiles)\b", re.I)
 _NEGATED_BODY = re.compile(r"\b(?:no|without|not|excluding|never)\b[^.!?]{0,40}?$", re.I)
@@ -35,7 +39,8 @@ def _hand_focus(scene):
     for body in _BODY_WORDS.finditer(scene):
         if not _NEGATED_BODY.search(scene[:body.start()]):
             return None
-    return _Tag(next(g for g in match.groups() if g))
+    word = next(g for g in match.groups() if g)
+    return _Tag('feet' if _FEET_WORDS.match(word) else 'hand')
 
 
 def scene_requirements(scene, requirements=()):

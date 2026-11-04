@@ -138,3 +138,38 @@ def test_renderer_passes_the_panel_framing_to_the_redraw(tmp_path):
 def test_a_wide_shot_keeps_both_shoes_and_the_ground_inside_the_frame():
     prompt = panel_prompt(CAST, {"scene": "Wide shot: Hero stands in a modest apartment at dawn."}, "Hero: teal blazer")
     assert "both shoes and the ground they stand on are drawn above the bottom edge" in prompt
+
+
+@pytest.mark.parametrize("scene, kind", [
+    ("Close-up: Hero's fingers turn the brass dial.", "hand"),
+    ("Close-up on Hero's palm holding the glowing seed.", "hand"),
+    ("Extreme close-up: Hero's clenched fist around the rope.", "hand"),
+    ("Close-up: Hero's gloved hand grips the rail.", "hand"),
+    ("Close-up: Hero's boots splash through the puddle.", "feet"),
+    ("Close-up: Hero's feet balance on the narrow beam. Expression and body language: steady, calm face.", "feet"),
+])
+def test_any_limb_named_after_the_close_up_label_is_a_limb_detail(scene, kind):
+    assert {"subject": "frame", "attribute": "framing", "expected": f"{kind}_detail_only"} in scene_requirements(scene)
+
+
+@pytest.mark.parametrize("scene", [
+    "Close-up: Hero's face lit by the lantern.",
+    "Close-up: Hero's eyes widen at the noise.",
+    "Close-up: Hero's hand on the rail while his face shows fear.",
+])
+def test_a_close_up_of_the_face_stays_a_normal_close_up(scene):
+    assert not any(r["attribute"] == "framing" for r in scene_requirements(scene))
+
+
+def test_state_changes_draw_the_end_state_and_hidden_props_are_never_drawn():
+    cast = {**CAST, "props": [{"name": "Notebook", "look": "brown leather journal"}]}
+    prompt = panel_prompt(cast, {"scene": "Medium shot: Hero at a corner, Notebook tucked away."}, "Hero: teal blazer")
+    assert "draw the instant just after it completes: the object is already in its new state" in prompt
+    assert "tucked away, pocketed, stowed, packed, under clothing or out of sight is not drawn at all" in prompt
+    assert "a prop the scene calls hidden or put away is not drawn" in prompt
+
+
+def test_the_art_style_is_never_drawn_as_paper_frame_or_margins():
+    prompt = panel_prompt({"style": "woodcut comic, earthy inks on cream paper", "characters": []},
+                          {"scene": "Wide shot: Hero in a modest apartment."}, "Hero: teal blazer")
+    assert "do not draw the paper, canvas, print, page edges, mat, frame or blank margins around the picture" in prompt

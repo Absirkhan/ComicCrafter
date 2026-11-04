@@ -77,7 +77,9 @@ OUTFIT_LOCK = (
 SINGLE_IMAGE_RULE = (
     "One single continuous image: no panel borders, seams, split-screen or horizontal or vertical dividing "
     "lines across the picture. The setting runs unbroken from the top edge to the bottom edge, behind and "
-    "around the figure; never stack two pictures, bands or strips."
+    "around the figure; never stack two pictures, bands or strips. The art style names how lines, colour and "
+    "texture are rendered, never a physical object: do not draw the paper, canvas, print, page edges, mat, frame "
+    "or blank margins around the picture."
 )
 SEAM_CORRECTION = re.compile(r"\b(?:seam|divider|dividing|split[- ]screen|panel (?:line|border)|border line|"
                              r"two (?:panels|pictures|images)|stacked|strip)\b", re.I)
@@ -118,8 +120,8 @@ def props_rule(cast: Dict) -> str:
         geometry + " Recurring props, drawn exactly as described every time they appear "
         f"(fixed identifying geometry, base colour, material and scale): {listed}. "
         "Allow approved changes of pose, position, opening, glow, lighting or damage while preserving the object's identity. "
-        "Each story prop appears exactly once, in the state the scene says: held or worn, never both, and never a "
-        "second copy of it. "
+        "Each story prop the scene shows appears exactly once, in the state the scene says: held or worn, never both, "
+        "and never a second copy of it; a prop the scene calls hidden or put away is not drawn. "
         "Translate base colours into the selected style's palette; use identifying value contrast in monochrome. "
     )
 
