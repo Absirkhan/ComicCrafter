@@ -45,3 +45,26 @@ def test_compiled_prompts_preserve_style_and_story_changes_without_forcing_faces
     assert 'without forcing a standing pose' in cover
     assert 'Show only the props and companions requested by the cover scene' in cover
     assert 'Draw every story prop' not in cover
+
+
+def test_every_panel_locks_the_outfit_against_tactical_gear():
+    from book_comic.comic_rules import OUTFIT_LOCK
+    from book_comic.image_prompts import panel_prompt
+    cast = {"style": "ink comic", "characters": [{"name_en": "Hero", "look": "teal blazer"}]}
+    for splash in (False, True):
+        prompt = panel_prompt(cast, {"scene": "Wide shot: Hero runs through the neon street."}, "Hero: teal blazer", splash=splash)
+        assert OUTFIT_LOCK in prompt
+    assert "tactical, armoured or fingerless gloves" in OUTFIT_LOCK
+    assert "unless the character's description, a listed prop or the scene names them" in OUTFIT_LOCK
+
+
+def test_neon_signs_are_light_shapes_never_letters_in_every_prompt_and_text_redraw():
+    from book_comic.comic_rules import NO_TEXT_RULE
+    from book_comic.image_prompts import cover_prompt, panel_prompt, sheet_prompt
+    assert "Neon signs, shop signs, screens and holograms are abstract glowing shapes" in NO_TEXT_RULE
+    assert "never letters, words, numbers or letter-like glyphs" in NO_TEXT_RULE
+    cast = {"style": "ink comic", "characters": [{"name_en": "Hero", "look": "teal blazer"}]}
+    hero = cast["characters"][0]
+    for prompt in (panel_prompt(cast, {"scene": "Wide shot: neon street."}, "Hero: teal blazer"),
+                   sheet_prompt(cast, hero), cover_prompt(cast, {"scene": "Hero under neon signs"})):
+        assert NO_TEXT_RULE in prompt
