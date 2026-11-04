@@ -100,8 +100,9 @@ class PageRenderer:
         self.current_panel = None
         self._diagnostic_start = 0
         self.lettering_checks = set()
-        names = [c.get(k) for c in cast.get("characters", []) for k in ("name_en", "name") if isinstance(c.get(k), str)]
-        names += [p["name"] for p in cast.get("props", []) if isinstance(p.get("name"), str)]
+        # Only the characters' own (private) names are kept out of saved reasons. The role names ("Hero") and the
+        # story's prop names are in almost every observation; blocking them left most rejections without a reason.
+        names = [c["name"] for c in cast.get("characters", []) if isinstance(c.get("name"), str) and c.get("name") != c.get("name_en")]
         self.rejected = RejectedArtSaver(self.options.rejected_dir, names)
 
     def failure_diagnostic(self, cover=False):
@@ -174,11 +175,11 @@ class PageRenderer:
             self._sheet = image_url(sheet.convert("RGB"))
         return self._sheet
 
-    def _image_prompt(self, panel: Dict, roles: tuple = (), splash: bool = False) -> str:
+    def _image_prompt(self, panel: Dict, roles: tuple = (), splash: bool = False, size: Optional[tuple] = None) -> str:
         people = "; ".join(
             f"{c['name_en']}: {c['look']}" for c in map(self._character, panel.get("characters", []))
         )
-        return panel_prompt({**self.cast, "prop_anchors": self.prop_anchors}, panel, people, roles, splash=splash)
+        return panel_prompt({**self.cast, "prop_anchors": self.prop_anchors}, panel, people, roles, splash=splash, size=size)
 
     def _draw_panel(self, panel: Dict, size: tuple, splash: bool = False) -> Image.Image:
         roles, references = [], []
@@ -194,7 +195,7 @@ class PageRenderer:
         self._diagnostic_start = len(self.audit)
         try:
             framing = framing_block(self.cast, panel, requirements)
-            art = self._art(self._image_prompt(panel, tuple(roles), splash), references, closest_aspect_ratio(*size), size=size,
+            art = self._art(self._image_prompt(panel, tuple(roles), splash, size), references, closest_aspect_ratio(*size), size=size,
                             requirements=requirements, framing=framing)
             for prop in art.info.get("comic_verification", {}).get("prop_checks", []):
                 if prop["visible"]:

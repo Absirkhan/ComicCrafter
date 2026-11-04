@@ -73,6 +73,19 @@ OUTFIT_LOCK = (
     "unless the character's description, a listed prop or the scene names them. "
 )
 
+# Fingerless tactical gloves were the most common design defect (6 of the last 30 rejections, 4 of 4 comics): a
+# ban alone did not hold, so every hero gets a positive "bare hands" unless the look, a prop or the scene names
+# handwear (a Power Gauntlet prop, "gloved hand").
+_HANDWEAR = re.compile(r"\b(?:gloves?|gloved|gauntlets?|mittens?|mitts?)\b", re.I)
+
+
+def bare_hands(*texts: str) -> str:
+    """The bare-hands line, or "" when the look, a prop or the scene names gloves or other handwear."""
+    if any(_HANDWEAR.search(t or "") for t in texts):
+        return ""
+    return "Hands: bare skin on both hands, no gloves, fingerless gloves, mitts, wraps or straps of any kind. "
+
+
 # Every story panel: the model sometimes splits one panel into two pictures with a seam line
 SINGLE_IMAGE_RULE = (
     "One single continuous image: no panel borders, seams, split-screen or horizontal or vertical dividing "
