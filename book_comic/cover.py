@@ -11,6 +11,7 @@ from typing import Dict, Optional, Sequence
 
 from PIL import Image, ImageOps
 
+from book_comic.best_draw import pick_fallback
 from book_comic.margins import trim_margins
 from book_comic.scene_requirements import scene_requirements
 from book_comic.art_check import ArtCheckError, inspect_art, request_art, require_checked
@@ -26,7 +27,15 @@ logger = logging.getLogger(__name__)
 # The one-line title and the starring line end near 14% of the height; a head starting above 20%
 # would crowd them (measured on real covers: 0.16 crowds, 0.19-0.24 leaves clear space).
 HEAD_TOP_MIN = 0.2
-ATTEMPTS = 2
+# Three draws, then the least-bad one without a hard defect (as for panels): with two draws and no fallback, a cover
+# lost the whole preview (2 of 6 test pages on 2026-11-04, a duplicate prop or a seam).
+ATTEMPTS = 3
+
+
+def _skipped(audit, draw: int, reason: str) -> None:
+    """A cover draw thrown away before the vision check is recorded, so a failed cover shows why it had fewer checks."""
+    if audit is not None:
+        audit.append({"accepted": False, "kind": "cover", "draw": draw, "skipped": reason, "requirements": [], "checks": {}})
 
 
 def find_seam(image: Image.Image, search_share: float = 0.45) -> Optional[int]:
@@ -105,16 +114,19 @@ def render_cover(
         roles.append("panels")
     prompt = cover_prompt({**cast, "prop_anchors": prop_anchors or {}}, {**cover, "requirements": requirements}, roles)
 
+    rejected = []
     for draw in range(1, ATTEMPTS + 1):
         art = request_art(images, prompt, references, closest_aspect_ratio(*size))
         trimmed, margins = trim_margins(art, size[0] / size[1])
         if margins == "redraw" and draw < ATTEMPTS:
+            _skipped(audit, draw, "margins")
             continue
         art = ImageOps.fit(trimmed if margins == "trimmed" else art, size)
         seam = find_seam(art)
         if seam is not None:
             art = ImageOps.fit(art.crop((0, seam, art.width, art.height)), size, centering=(0.5, 0.0))
             if find_seam(art) is not None:
+                _skipped(audit, draw, "seam")
                 continue
         found = inspect_art(art, vision, references=references, context=prompt, requirements=requirements,
                             props=cast.get("props", []), anchors=prop_anchors)
@@ -131,8 +143,15 @@ def render_cover(
             head = found["head_top"]
             break  # a high head is handled by local title placement, without another image call
         report_rejected(on_reject, draw, art, found, False, prompt, requirements)
+        rejected.append((art, found, report))
     else:
-        raise ArtCheckError("comic_cover_rejected")
+        best = pick_fallback([(a, f) for a, f, _ in rejected])
+        if best is None:
+            raise ArtCheckError("comic_cover_rejected")
+        art, found, report = rejected[best]
+        report["fallback"] = True
+        head = found["head_top"]
+        logger.warning(f"Cover: every draw was rejected; keeping the least-bad one (draw {best + 1})")
 
     dpi_tag = {"dpi": (dpi, dpi)} if dpi else {}
     # Move the title instead of drawing again when the accepted head is in the title block.
