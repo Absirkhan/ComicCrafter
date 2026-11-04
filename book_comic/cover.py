@@ -11,7 +11,7 @@ from typing import Dict, Optional, Sequence
 
 from PIL import Image, ImageOps
 
-from book_comic.best_draw import pick_fallback
+from book_comic.best_draw import pick_fallback, unasked_gloves
 from book_comic.margins import trim_margins
 from book_comic.scene_requirements import scene_requirements
 from book_comic.art_check import ArtCheckError, inspect_art, request_art, require_checked
@@ -130,6 +130,8 @@ def render_cover(
                 continue
         found = inspect_art(art, vision, references=references, context=prompt, requirements=requirements,
                             props=cast.get("props", []), anchors=prop_anchors)
+        if unasked_gloves(found, prompt):
+            found = {**found, "gloves": True}
         report = {"accepted": None, "requirements": requirements, "checks": found, "kind": "cover"}
         if audit is not None:
             audit.append(report)

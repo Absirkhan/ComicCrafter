@@ -173,3 +173,32 @@ def test_the_check_asks_for_text_prominence_and_allows_dial_numerals():
     assert "hour numerals, digits, ticks and needles on a watch, clock, compass or gauge face are normal" in vision.prompts[0]
     missing = inspect_art(Image.new("RGB", (10, 10)), FakeVision(lambda p, i: {**BASE, "head_top": 400}))
     assert missing["text_prominent"] is None and require_checked(missing) is True  # prominence is optional, never "unavailable"
+
+
+GLOVED = {**BASE, "design_mismatch": True, "corrections": ["Remove the black fingerless tactical gloves from both hands."]}
+BARE_BRIEF = "scene ... Hands: bare skin on both hands, no gloves, fingerless gloves, mitts, wraps or straps of any kind."
+
+
+def test_unasked_gloves_are_a_hard_defect_and_never_kept():
+    from book_comic.best_draw import hard_defect, unasked_gloves
+    assert unasked_gloves(GLOVED, BARE_BRIEF)
+    assert hard_defect({**GLOVED, "gloves": True})
+    # a story whose hero wears gloves never gets the bare-hands line, so gloves there are not a hard defect
+    assert not unasked_gloves(GLOVED, "scene ... Hero: red coat and leather gloves")
+    assert not unasked_gloves({**BASE, "corrections": ["Remove the gloves."]}, BARE_BRIEF)  # no failed check
+
+
+def test_a_panel_whose_only_soft_draw_has_gloves_keeps_another_draw():
+    images = FakeImages(colours("red", "green", "blue"))
+    vision = judge({RED: {"design_mismatch": True, "corrections": ["Remove the fingerless gloves."]},
+                    GREEN: {"scene_mismatch": True, "design_mismatch": True},
+                    BLUE: {"design_mismatch": True, "corrections": ["Remove the tactical gloves."]}})
+    art = draw_checked(images, vision, BARE_BRIEF, [], "2:3", fallback=True)
+    assert art.getpixel((0, 0)) == GREEN  # more failed checks, but no gloves
+
+
+def test_gloves_on_every_draw_fail_the_panel():
+    images = FakeImages(colours("red", "green", "blue"))
+    gloves = {"design_mismatch": True, "corrections": ["Remove the fingerless gloves."]}
+    with pytest.raises(ArtCheckError):
+        draw_checked(images, judge({c: gloves for c in (RED, GREEN, BLUE)}), BARE_BRIEF, [], "2:3", fallback=True)

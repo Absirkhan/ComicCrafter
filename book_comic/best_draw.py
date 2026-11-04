@@ -9,18 +9,31 @@ requirement and prop drift) is ranked: fewest failed check flags first, then few
 checks, then the earliest draw.
 """
 
+import re
 from typing import Dict, List, Optional, Sequence, Tuple
 
 from book_comic.rejected_art import CHECK_NAMES
 
 HARD_DEFECTS = ("bad_anatomy", "identity_mismatch")
+# Unasked-for gloves (user decision 2026-11-04): the most common design drift, and a kept draw showed them.
+_GLOVES = re.compile(r"\b(?:fingerless|tactical|gloves?|gloved|mitts?)\b", re.I)
+BARE_HANDS_MARK = "Hands: bare skin on both hands"
+
+
+def unasked_gloves(found: Dict, prompt: str) -> bool:
+    """The check saw gloves (in a correction or a prop/design observation) on a brief that asked for bare hands."""
+    if BARE_HANDS_MARK not in (prompt or "") or not any(found.get(k) for k in ("design_mismatch", "prop_mismatch", "requirement_mismatch")):
+        return False
+    seen = [*(found.get("corrections") or []), *(str(c.get("observed", "")) for c in found.get("prop_checks") or [] if isinstance(c, dict)),
+            *(str(c.get("observed", "")) for c in found.get("requirement_checks") or [] if isinstance(c, dict))]
+    return any(isinstance(s, str) and _GLOVES.search(s) for s in seen)
 
 
 def hard_defect(found: Dict) -> bool:
-    """Broken anatomy, a different face, a seam, or writing that is prominent or of unknown prominence."""
+    """Broken anatomy, a different face, a seam, unasked-for gloves, or writing that is prominent or of unknown prominence."""
     text = bool(found.get("has_text")) and found.get("text_prominent") is not False
     seam = bool(found.get("scene_mismatch")) and bool(found.get("seam"))
-    return text or seam or any(found.get(k) for k in HARD_DEFECTS)
+    return text or seam or bool(found.get("gloves")) or any(found.get(k) for k in HARD_DEFECTS)
 
 
 def _rank(found: Dict) -> Tuple[int, int]:

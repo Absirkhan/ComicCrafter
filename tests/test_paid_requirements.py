@@ -24,7 +24,7 @@ def test_extreme_long_shot_establishes_scale_before_full_character_description()
     prompt = panel_prompt({'characters': [], 'style': 'ink comic'},
                           {'scene': 'Extreme long shot: Hero watches the approaching storm.'}, 'Hero: teal blazer')
     assert prompt.startswith('EXTREME LONG SHOT:')
-    assert 'one-eighth' in prompt
+    assert 'about one-tenth of the image height' in prompt and 'never in the foreground' in prompt
 
 
 @pytest.mark.parametrize('scene,state', [('Hero opens the Case.', 'open'), ('Hero shuts the lid.', 'closed'),

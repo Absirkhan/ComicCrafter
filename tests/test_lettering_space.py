@@ -66,7 +66,8 @@ def test_the_checker_is_told_the_calm_area_never_rejects_art():
     inspect_art(Image.new("RGB", (64, 64)), vision, context="brief")
     assert CHECK_NOTE in vision.prompts[0]
     assert "never set scene_mismatch" in CHECK_NOTE and "upper third" in CHECK_NOTE
-    assert "taller than about one-quarter of the image height is still wrong" in CHECK_NOTE  # #11 kept
+    assert "a small full figure up to about one-third of the image height" in CHECK_NOTE
+    assert "Facing direction alone is never a reason to fail an extreme long shot" in CHECK_NOTE
     inspect_art(Image.new("RGB", (64, 64)), vision)
     assert CHECK_NOTE not in vision.prompts[1]  # the sheet check has no brief and no calm area
 

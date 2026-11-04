@@ -15,10 +15,10 @@ from book_comic.scene_requirements import scene_requirements
 
 SHOT_FRAMING = {
     "Extreme long shot": (
-        "EXTREME LONG SHOT: establish the environment. Every person is a small full figure about one-eighth of "
-        "the image height, and a figure taller than one-quarter of the image height is wrong; most of the canvas "
-        "shows the surroundings. Do not copy the full-body scale of the photo or character sheet. Faces need not "
-        "be readable at this distance."
+        "EXTREME LONG SHOT: establish the environment. The camera is far away: every person is a tiny full figure "
+        "about one-tenth of the image height, standing in the middle distance or background, never in the "
+        "foreground; buildings, landscape or sky fill most of the canvas. Do not copy the full-body scale of the "
+        "photo or character sheet. Faces need not be readable at this distance."
     ),
     "Wide shot": (
         "WIDE SHOT: the whole body is visible from the top of the head to the feet, with clear space around the "
