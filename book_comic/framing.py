@@ -23,7 +23,8 @@ SHOT_FRAMING = {
     "Wide shot": (
         "WIDE SHOT: the whole body is visible from the top of the head to the feet, with clear space around the "
         "figure on every side and the setting readable; the figure fills at most about two-thirds of the image "
-        "height. Do not crop off the head or the feet."
+        "height. Do not crop off the head or the feet: both shoes and the ground they stand on are drawn above the "
+        "bottom edge, with a strip of floor or ground visible below them."
     ),
     "Medium shot": (
         "MEDIUM SHOT: crop at the waist. Show the character from the top of the head down to the waist only; "

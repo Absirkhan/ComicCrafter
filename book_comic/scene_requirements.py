@@ -4,7 +4,11 @@ import re
 
 _HAND_FOCUS = re.compile(
     r"\b(hands?)[ -]detail\b|\bdetail (?:shot )?of (?:\w+'s |his |her |their |the |a |one )?(?:right |left )?(hands?)\b"
-    r"|\bclose-up of (?:\w+'s |his |her |their |the |a |one )?(?:right |left )?(hands?)\b", re.I)
+    r"|\bclose-up of (?:\w+'s |his |her |their |the |a |one )?(?:right |left )?(hands?)\b"
+    r"|^\s*(?:extreme )?close-up:\s*(?:\w+'s|his|her|their|the|one)\s+(?:right |left )?(hands?)\b", re.I)
+# The host appends a character direction ("Expression and body language: ... the face when visible ...") to
+# every scene; it describes the hero in general, not what this crop shows, so it never cancels a hand detail.
+_DIRECTION = re.compile(r"\bExpression and body language:", re.I)
 _BODY_WORDS = re.compile(r"\b(face|faces|head|eyes|torso|chest|shoulders?|waist|body|expression|smile|smiles)\b", re.I)
 _NEGATED_BODY = re.compile(r"\b(?:no|without|not|excluding|never)\b[^.!?]{0,40}?$", re.I)
 
@@ -24,6 +28,7 @@ def _hand_focus(scene):
     A face, head, torso or expression mentioned positively anywhere in the scene keeps the shot a normal
     close-up; "no face" or "without the torso" does not.
     """
+    scene = scene[:m.start()] if (m := _DIRECTION.search(scene)) else scene
     match = _HAND_FOCUS.search(scene)
     if not match:
         return None

@@ -37,6 +37,11 @@ def test_no_label_means_no_crop_but_the_single_image_rule_stays():
     "Close-up: hand detail of Hero turning the brass key.",
     "Close-up of Hero's right hand on the brass key, no face or torso.",
     "Close-up: detail of his hands untying the knot.",
+    # e35347af panel 3: the shot label then the hand as the subject, with the host's character direction appended
+    "Close-up: Hero's hand closes the Notebook abruptly as footsteps approach, cloak edge visible. One human only. "
+    "Expression and body language: Hero has an observant, curious presence; show this moment's emotion through the "
+    "face when visible, otherwise through gesture or posture.",
+    "Close-up: Hero's right hand presses the brass key into the lock.",
 ])
 def test_named_hand_details_become_limb_only_crops(scene):
     requirements = scene_requirements(scene)
@@ -50,6 +55,7 @@ def test_named_hand_details_become_limb_only_crops(scene):
     "Close-up of Hero's hand on the door while his face shows fear.",
     "Medium shot: Hero raises both hands.",
     "Close-up: Hero's face as the hand of the clock strikes.",
+    "Close-up: Hero's hand on the rail while Hero's face shows fear. Expression and body language: calm.",
 ])
 def test_hands_with_a_visible_face_or_body_are_not_limb_only(scene):
     assert not any(r["attribute"] == "framing" for r in scene_requirements(scene))
@@ -127,3 +133,8 @@ def test_renderer_passes_the_panel_framing_to_the_redraw(tmp_path):
     assert images.calls[0]["prompt"].startswith("WIDE SHOT:")
     assert "Repeat of the required framing: WIDE SHOT:" in images.calls[1]["prompt"]
     assert "ORIENTATION: Hero moves toward the gate" in images.calls[1]["prompt"]
+
+
+def test_a_wide_shot_keeps_both_shoes_and_the_ground_inside_the_frame():
+    prompt = panel_prompt(CAST, {"scene": "Wide shot: Hero stands in a modest apartment at dawn."}, "Hero: teal blazer")
+    assert "both shoes and the ground they stand on are drawn above the bottom edge" in prompt
