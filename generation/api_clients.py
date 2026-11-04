@@ -36,23 +36,26 @@ class LLMClient(ABC):
 
 
 class GroqClient(LLMClient):
-    """Client for an OpenAI-compatible chat API (routed through OpenRouter)."""
+    """Client for Groq API (Llama 3.3)."""
     
     def __init__(self, api_key: Optional[str] = None, model: Optional[str] = None):
         """Initialize Groq client.
         
         Args:
-            api_key: OpenRouter API key. If None, uses OPENROUTER_API_KEY
+            api_key: Groq API key. If None, uses config
             model: Model name. If None, uses config default
         """
         config = get_config()
-        self.api_key = api_key or os.getenv("OPENROUTER_API_KEY", "")
+        self.api_key = api_key or config.groq_api_key
         self.model = model or config.default_llm_model
         
         if not self.api_key:
-            raise ValueError("OpenRouter API key not provided")
+            raise ValueError("Groq API key not provided")
         
-        self.client = OpenAI(api_key=self.api_key, base_url="https://openrouter.ai/api/v1")
+        # Imported here so the comic pipeline (which loads this module) does not need the groq package.
+        from groq import Groq
+
+        self.client = Groq(api_key=self.api_key)
         logger.info(f"Initialized GroqClient with model: {self.model}")
     
     def generate_text(
@@ -86,6 +89,50 @@ class GroqClient(LLMClient):
             return result
         except Exception as e:
             logger.error(f"Error generating text with Groq: {e}")
+            raise
+
+
+OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
+
+
+class OpenRouterTextClient(LLMClient):
+    """Client for text models on OpenRouter (OpenAI-compatible chat API).
+
+    Credentials and model come only from OpenRouter settings (OPENROUTER_API_KEY,
+    OPENROUTER_MODEL), never from the Groq key or the Groq model default.
+    """
+
+    def __init__(self, api_key: Optional[str] = None, model: Optional[str] = None):
+        self.api_key = api_key or os.getenv("OPENROUTER_API_KEY", "")
+        self.model = model or os.getenv("OPENROUTER_MODEL", "")
+
+        if not self.api_key:
+            raise ValueError("OpenRouter API key not provided (set OPENROUTER_API_KEY)")
+        if not self.model:
+            raise ValueError("OpenRouter model not provided (set OPENROUTER_MODEL)")
+
+        self.client = OpenAI(api_key=self.api_key, base_url=OPENROUTER_BASE_URL)
+        logger.info(f"Initialized OpenRouterTextClient with model: {self.model}")
+
+    def generate_text(
+        self,
+        prompt: str,
+        max_tokens: int = 1024,
+        temperature: float = 0.7,
+        **kwargs
+    ) -> str:
+        """Generate text with the configured OpenRouter model."""
+        try:
+            response = self.client.chat.completions.create(
+                messages=[{"role": "user", "content": prompt}],
+                model=self.model,
+                max_tokens=max_tokens,
+                temperature=temperature,
+                **kwargs
+            )
+            return response.choices[0].message.content
+        except Exception as e:
+            logger.error(f"Error generating text with OpenRouter ({self.model}): {e}")
             raise
 
 
@@ -146,6 +193,22 @@ class GeminiClient(LLMClient):
         except Exception as e:
             logger.error(f"Error generating text with Gemini: {e}")
             raise
+
+
+LLM_PROVIDERS = {
+    "groq": GroqClient,
+    "gemini": GeminiClient,
+    "openrouter": OpenRouterTextClient,
+}
+
+
+def make_llm_client(provider: str) -> LLMClient:
+    """Build the text client for a provider name ("groq", "gemini" or "openrouter")."""
+    try:
+        client_class = LLM_PROVIDERS[provider.lower()]
+    except KeyError:
+        raise ValueError(f"Unknown LLM provider: {provider}") from None
+    return client_class()
 
 
 class HuggingFaceClient:

@@ -1,0 +1,5 @@
+# Celery worker for worker/tasks.py: the comic runtime plus Celery with the Redis transport.
+#   pip install -r requirements.worker.txt
+# The generate_comic task (core.ComicCrafter) also needs the full requirements.txt.
+-r requirements.comic.txt
+celery[redis]>=5.3,<6

@@ -43,12 +43,12 @@ def generate_comic(
     style: str = "comic book style",
 ) -> dict:
     _require_env("OPENROUTER_API_KEY")
-    os.environ.setdefault("DEFAULT_LLM_MODEL", _require_env("OPENROUTER_MODEL"))
+    _require_env("OPENROUTER_MODEL")
 
     # Imported lazily so the worker starts fast and heavy deps load in the child process.
     from core import ComicCrafter
 
-    crafter = ComicCrafter(llm_provider="groq", image_provider="openrouter", output_dir=OUTPUT_DIR)
+    crafter = ComicCrafter(llm_provider="openrouter", image_provider="openrouter", output_dir=OUTPUT_DIR)
     pages = crafter.generate_comic(
         story_text=story,
         style=style,

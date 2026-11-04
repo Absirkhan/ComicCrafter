@@ -8,7 +8,7 @@ from agents.story_agent import StoryAgent, Scene
 from agents.prompt_agent import PromptAgent, ImagePrompt
 from agents.layout_agent import LayoutAgent, PageLayout
 from generation.image_generator import ImageGenerator
-from generation.api_clients import GroqClient, GeminiClient, HuggingFaceClient
+from generation.api_clients import HuggingFaceClient, make_llm_client
 from generation.openrouter_image_client import OpenRouterImageClient, closest_aspect_ratio
 from layout.bubble_planner import plan_bubbles, default_plan
 from layout.comic_bubbles import render_dialogue
@@ -32,7 +32,7 @@ class ComicCrafter:
         """Initialize ComicCrafter.
         
         Args:
-            llm_provider: LLM provider ("groq" or "gemini")
+            llm_provider: LLM provider ("groq", "gemini" or "openrouter")
             image_provider: Image generation provider ("huggingface" or "openrouter")
             output_dir: Directory for output files
         """
@@ -41,12 +41,7 @@ class ComicCrafter:
         self.output_dir.mkdir(parents=True, exist_ok=True)
         
         # Initialize LLM client
-        if llm_provider.lower() == "groq":
-            self.llm_client = GroqClient()
-        elif llm_provider.lower() == "gemini":
-            self.llm_client = GeminiClient()
-        else:
-            raise ValueError(f"Unknown LLM provider: {llm_provider}")
+        self.llm_client = make_llm_client(llm_provider)
         
         # Initialize image client
         if image_provider.lower() == "huggingface":

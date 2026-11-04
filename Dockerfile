@@ -13,9 +13,9 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONPATH=/engine:/engine/ComicCrafter
 
 # libfribidi0: Pillow's bundled libraqm loads it at run time; without it Hebrew (RTL) lettering is
-# drawn in logical order, i.e. reversed.
+# drawn in logical order, i.e. reversed. poppler-utils: book_comic.book_text runs pdftotext.
 RUN apt-get update \
- && apt-get install -y --no-install-recommends fonts-dejavu-core libfribidi0 \
+ && apt-get install -y --no-install-recommends fonts-dejavu-core libfribidi0 poppler-utils \
  && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /engine/ComicCrafter
