@@ -197,3 +197,26 @@ def test_limb_details_written_other_ways_are_still_limb_details(scene):
 def test_a_face_that_stays_in_shot_keeps_a_normal_close_up():
     assert not any(r["attribute"] == "framing" for r in scene_requirements(
         "Close-up: Hero's hand reaches toward the fog, eyes wide with curiosity and mouth slightly open."))
+
+
+def test_a_hand_detail_puts_the_camera_above_the_hand_so_the_body_is_never_behind_it():
+    prompt = panel_prompt(CAST, {"scene": "Close-up: Hero's hand traces a line on the map on the table."}, "Hero: teal blazer")
+    assert "Camera: above the hand, looking down at the surface or object it touches" in prompt
+    assert "the character's body is behind the camera, never behind the hand" in prompt
+
+
+def test_the_check_allows_the_operating_sleeve_and_a_thin_strip_of_clothing_at_an_edge():
+    from book_comic.art_check import inspect_art
+    from conftest import FakeVision
+    from PIL import Image
+    seen = []
+    vision = FakeVision(lambda prompt, image: seen.append(prompt) or {"has_text": False, "bad_anatomy": False})
+    inspect_art(Image.new("RGB", (40, 20), "white"), vision, context="scene",
+                requirements=[{"subject": "frame", "attribute": "framing", "expected": "hand_detail_only"}])
+    assert any("a thin strip of clothing at one frame edge still count as hand_detail_only" in p for p in seen)
+
+
+def test_a_folded_state_is_drawn_already_folded():
+    from book_comic.image_prompts import acceptance_prompt
+    facts = acceptance_prompt([{"subject": "city map", "attribute": "state", "expected": "folded"}])
+    assert "city map is already folded into a small compact rectangle" in facts and "not spread, unfolded" in facts
