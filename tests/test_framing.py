@@ -220,3 +220,29 @@ def test_a_folded_state_is_drawn_already_folded():
     from book_comic.image_prompts import acceptance_prompt
     facts = acceptance_prompt([{"subject": "city map", "attribute": "state", "expected": "folded"}])
     assert "city map is already folded into a small compact rectangle" in facts and "not spread, unfolded" in facts
+
+
+
+@pytest.mark.parametrize("scene", [
+    # ed88ca80 panel 1: three draws, each a normal-sized hero in the room, all failed the extreme-long-shot scale
+    "Extreme long shot: Hero in a modest city apartment at night, standing by a window overlooking empty streets. "
+    "One human only. Expression and body language: curious.",
+    "Extreme long shot: Hero sits alone in the dim office at the end of the hallway.",
+    "Extreme long shot: Inside the old cabin, Hero lights a lantern.",
+])
+def test_an_indoor_extreme_long_shot_is_drawn_as_a_wide_shot(scene):
+    from book_comic.comic_rules import establishing_shot
+    assert establishing_shot(scene).startswith("Wide shot:")
+    assert establishing_shot(scene)[len("Wide shot:"):] == scene[len("Extreme long shot:"):]
+
+
+@pytest.mark.parametrize("scene", [
+    "Extreme long shot: Hero walks along a quiet city street at midday.",
+    "Extreme long shot: Hero stands on the edge of a tall building at dusk overlooking the city.",
+    "Extreme long shot: Hero on the apartment rooftop above the skyline.",
+    "Wide shot: Hero in the apartment kitchen.",
+    "Close-up: Hero's hand on the office desk.",
+])
+def test_outdoor_extreme_long_shots_and_other_shots_are_unchanged(scene):
+    from book_comic.comic_rules import establishing_shot
+    assert establishing_shot(scene) == scene

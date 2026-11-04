@@ -37,10 +37,10 @@ def test_the_draw_with_the_fewest_failed_checks_is_kept():
     assert art.info["comic_verification"]["fallback"] is True
 
 
-def test_a_tie_keeps_the_earliest_draw():
+def test_a_tie_keeps_the_latest_draw_which_carries_the_corrections():
     images = FakeImages(colours("red", "green", "blue"))
     art = draw_checked(images, judge({c: {"scene_mismatch": True} for c in (RED, GREEN, BLUE)}), "scene", [], "2:3", fallback=True)
-    assert art.getpixel((0, 0)) == RED
+    assert art.getpixel((0, 0)) == BLUE
 
 
 @pytest.mark.parametrize("hard", ["has_text", "bad_anatomy", "identity_mismatch"])
@@ -73,7 +73,7 @@ def test_a_seam_word_without_a_scene_mismatch_is_not_a_hard_defect():
     images = FakeImages(colours("red", "green", "blue"))
     stray = {"design_mismatch": True, "corrections": ["Remove the strip of tape from the jacket."]}
     vision = judge({RED: stray, GREEN: {"design_mismatch": True, "scene_mismatch": True}, BLUE: stray})
-    assert draw_checked(images, vision, "scene", [], "2:3", fallback=True).getpixel((0, 0)) == RED
+    assert draw_checked(images, vision, "scene", [], "2:3", fallback=True).getpixel((0, 0)) == BLUE  # tie: the later
 
 
 def test_three_hard_defects_still_fail_the_panel():
@@ -108,7 +108,7 @@ def test_a_kept_draw_anchors_only_props_it_drew_correctly(tmp_path):
     r = PageRenderer(CAST, FakeImages(colours("red", "green", "blue")), vision, SMALL, RenderOptions(check_art=True))
     path = r.render_page([{"scene": "Dana holds the lantern"}], tmp_path / "page_02.png")
     assert path.exists() and "the lantern" not in r.prop_anchors
-    assert [a.get("fallback") for a in r.audit] == [True, None, None]
+    assert [a.get("fallback") for a in r.audit] == [None, None, True]  # a tie keeps the latest draw
 
 
 def test_the_character_sheet_never_uses_the_fallback(tmp_path):
@@ -138,7 +138,7 @@ def test_a_failing_select_hook_never_changes_the_render():
     images = FakeImages(colours("red", "green", "blue"))
     art = draw_checked(images, judge({c: {"scene_mismatch": True} for c in (RED, GREEN, BLUE)}), "scene", [], "2:3",
                        fallback=True, on_select=boom)
-    assert art.getpixel((0, 0)) == RED
+    assert art.getpixel((0, 0)) == BLUE
 
 
 def test_small_background_text_is_soft_and_a_draw_carrying_it_may_be_kept():

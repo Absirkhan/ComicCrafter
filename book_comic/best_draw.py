@@ -6,7 +6,7 @@ splits the picture: a scene_mismatch whose correction names a seam, divider, bor
 notices at once, so a draw with any of them is never published. Tiny or illegible pseudo-lettering (text_prominent False), even on a map
 or page the hero holds, is soft: still redrawn, but a kept draw may carry it. The rest (scene, design,
 requirement and prop drift) is ranked: fewest failed check flags first, then fewest failed requirement
-checks, then the earliest draw.
+checks, then the latest draw (a redraw carries the check's corrections).
 """
 
 import re
@@ -47,7 +47,9 @@ def pick_fallback(rejected: Sequence[Tuple[object, Dict]]) -> Optional[int]:
     eligible: List[Tuple[Tuple[int, int], int]] = [
         (_rank(found), i) for i, (_, found) in enumerate(rejected) if not hard_defect(found)
     ]
-    return min(eligible)[1] if eligible else None
+    # A tie goes to the later draw: each redraw carries the check's corrections, so it is usually closer to the brief
+    # (ed88ca80 panel 1 kept draw 1, the closest crop, over draw 2, the better establishing shot).
+    return min(eligible, key=lambda ranked: (ranked[0], -ranked[1]))[1] if eligible else None
 
 
 def fallback_verification(found: Dict) -> Dict:

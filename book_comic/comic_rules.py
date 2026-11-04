@@ -139,6 +139,31 @@ def props_rule(cast: Dict) -> str:
     )
 
 
+# An extreme long shot needs a huge space: inside a room the camera can only back up to the opposite wall, so the
+# hero is never a tiny figure and every draw failed the scale check (ed88ca80 panel 1, "in a modest city
+# apartment"). Indoors the establishing shot is a wide shot: the whole room and the whole figure.
+_INDOORS = re.compile(r"\b(?:apartment|flat|room|bedroom|living room|kitchen|bathroom|office|classroom|studio|attic|"
+                      r"basement|cellar|hallway|corridor|cabin|tent|cockpit|lab|laboratory|workshop|garage|inside|"
+                      r"indoors|interior)\b", re.I)
+_OUTDOORS = re.compile(r"\b(?:rooftop|roof|skyline|street|streets|city below|valley|mountain|field|forest|beach|sea|"
+                       r"desert|harbou?r|bridge|plaza|square|landscape|horizon|sky)\b", re.I)
+
+
+def establishing_shot(scene: str) -> str:
+    """The scene with an indoor "Extreme long shot:" drawn as a "Wide shot:"; anything else unchanged.
+
+    Only the scene's own text decides (the host's appended character direction is ignored); a view through a
+    window still counts as indoors, but a scene that is outdoors (a rooftop, a street) keeps its extreme long shot.
+    """
+    if scene_shot(scene) != "Extreme long shot":
+        return scene
+    head = re.split(r"\bOne human only\b|\bExpression and body language:", scene, maxsplit=1)[0]
+    setting = re.split(r"\b(?:overlooking|looking out|through the window|toward|towards)\b", head, maxsplit=1)[0]
+    if not _INDOORS.search(setting) or _OUTDOORS.search(setting):
+        return scene
+    return "Wide shot:" + scene.strip()[len("Extreme long shot:"):]
+
+
 def scene_shot(scene: str) -> Optional[str]:
     """The shot a scene starts with ("Medium shot: ..."), or None."""
     return next((shot for shot in COMIC_SHOTS if scene.strip().startswith(f"{shot}:")), None)

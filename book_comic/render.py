@@ -12,6 +12,7 @@ from typing import Dict, List, Optional
 from PIL import Image, ImageOps, ImageDraw
 from PIL.PngImagePlugin import PngInfo
 
+from book_comic.comic_rules import establishing_shot
 from book_comic.scene_requirements import scene_requirements
 from book_comic.art_check import ArtCheckError, draw_checked, request_art
 from book_comic.rejected_art import RejectedArtSaver
@@ -269,6 +270,7 @@ class PageRenderer:
         images = []
         self._previous = None
         for number, (panel, slot) in enumerate(zip(panels, layout), 1):
+            panel = {**panel, "scene": establishing_shot(panel["scene"])}
             self.current_panel = number
             size = tuple(slot.get_content_area()[2:])
             art = self._draw_panel(panel, size, splash)
