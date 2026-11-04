@@ -81,7 +81,7 @@ def inspect_art(image: Image.Image, vision: VisionClient, references=(), context
             "visible, not what was requested. For pose/state use the same single-value vocabulary as expected: "
             "standing, kneeling, seated, crouching, open, closed, flat, upright, or not_visible. "
             "For attribute hand, observed MUST be right, left, ambiguous, or not_visible. Determine anatomical side from thumb, knuckles and limb connection, never the screen side or requested description. If uncertain use ambiguous. "
-            "For framing, observed MUST be hand_detail_only, feet_detail_only, body_visible, or not_visible. A visible torso, waist, shoulder, upper arm or head makes a limb-only crop body_visible even when the face is hidden. "
+            "For framing, observed MUST be hand_detail_only, feet_detail_only, body_visible, or not_visible. A visible head, shoulder, or a clear part of the chest, torso or waist makes a limb-only crop body_visible even when the face is hidden; the operating arm's own sleeve and a thin strip of clothing at one frame edge still count as hand_detail_only. "
             "A book with separated covers or spread pages is open, not closed. A person resting a knee on the "
             "floor is kneeling, not standing. A peel with a tall vertical centre is upright, not flat. "
             "Return prop_checks, one per listed prop: {name:string, visible:boolean, observed:string, matches:boolean}. "

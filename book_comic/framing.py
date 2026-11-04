@@ -40,12 +40,14 @@ SHOT_FRAMING = {
 HAND_DETAIL = (
     "LIMB-ONLY MACRO DETAIL. Crop at the wrist or short sleeve cuff; show only the specified hand, cuff and focal "
     "objects. Head, neck, shoulders, chest, torso, waist and all other limbs remain outside the frame; a second "
-    "hand appears only when the scene names both hands. This crop overrides the full-body reference composition."
+    "hand appears only when the scene names both hands. This crop overrides the full-body reference composition. "
+    "Camera: above the hand, looking down at the surface or object it touches, so that surface fills the background; "
+    "the forearm enters from a frame edge and the character's body is behind the camera, never behind the hand."
 )
 FEET_DETAIL = (
     "LIMB-ONLY MACRO DETAIL. Crop at the lower legs; show only the specified feet and focal objects. Head, neck, "
     "shoulders, torso, waist and all other limbs remain outside the frame. This crop overrides the full-body "
-    "reference composition."
+    "reference composition. Camera: low and close to the ground, so the ground fills the background."
 )
 
 _TARGET = (r"(?P<t>(?:the|a|an|his|her|their|its|[A-Z][\w'’-]*)\b[^,.;:!?]{0,80}?)"

@@ -190,8 +190,12 @@ def acceptance_prompt(requirements=(), anchors=None):
             facts.append("Detail crop of the specified feet/lower legs and focal objects only; exclude head, torso, waist and hands")
         if r['attribute'] == 'state' and r['expected'].strip().lower() == 'flat':
             facts.append(f"{r['subject']} lies flush against the supporting surface, including its centre and stem; no tall upright centre")
-        if r['attribute'] == 'state' and r['expected'].strip().lower() == 'closed':
+        if r['attribute'] == 'state' and r['expected'].strip().lower() in ('closed', 'shut'):
             facts.append(f"{r['subject']} is fully shut, not half-open; no interior spread is exposed")
+        if r['attribute'] == 'state' and r['expected'].strip().lower() in ('folded', 'folded up', 'folded closed'):
+            # "Hero folds the city map": the model drew it spread open on 3 of 3 draws (3cef9bb5 p17 panel 3).
+            facts.append(f"{r['subject']} is already folded into a small compact rectangle held in the hand; it is not "
+                         "spread, unfolded or partly open, and none of its inside is showing")
     for name, appearance in (anchors or {}).items():
         facts.append(f"{name} has this established construction: {appearance}")
     return (" Required visible facts: " + "; ".join(facts) + ". ") if facts else ""
