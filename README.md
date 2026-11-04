@@ -157,8 +157,30 @@ files = client.download_all_outputs(job_id, Path("./output"))
 
 `book_comic` turns a book PDF into one comic page per chapter plus a cover
 (`examples/book_example.py`, Celery task `generate_book_comic`). It needs only
-`requirements.comic.txt` and `OPENROUTER_API_KEY` / `OPENROUTER_MODEL`
-(optional `OPENROUTER_IMAGE_MODEL`, `OPENROUTER_VISION_MODEL`).
+`requirements.comic.txt`, poppler's `pdftotext` (`brew install poppler` /
+`apt-get install poppler-utils`; the Docker image has it) and `OPENROUTER_API_KEY` /
+`OPENROUTER_MODEL` (optional `OPENROUTER_IMAGE_MODEL`, `OPENROUTER_VISION_MODEL`).
+
+```bash
+pip install -r requirements.comic.txt
+python examples/book_example.py book.pdf 1 3   # runs the pipeline synchronously, no Celery
+```
+
+### Celery worker
+
+`worker/tasks.py` queues the same jobs on Celery with Redis (`CELERY_BROKER_URL`,
+`CELERY_RESULT_BACKEND`, default `redis://localhost:6379/0`). Its tasks write story text with
+OpenRouter (`llm_provider="openrouter"`, model from `OPENROUTER_MODEL`); Groq setups keep using
+`GROQ_API_KEY` with `llm_provider="groq"`.
+
+```bash
+pip install -r requirements.worker.txt        # comic runtime + celery[redis]
+pip install -r requirements.txt               # only for the generate_comic task (core.ComicCrafter)
+redis-server &                                # or any reachable Redis
+celery -A worker.tasks worker --loglevel=info
+```
+
+Queue a job from Python with `generate_book_comic.delay("book.pdf", first_chapter=1, last_chapter=3)`.
 
 - **Bubble kinds**: each dialogue line has a `bubble`: `speech`, `thought`, `shout`, `whisper`,
   `broadcast`, `fear` or `song`, each with its own outline, tail and text size. Unknown or missing
