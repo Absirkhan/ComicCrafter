@@ -173,3 +173,27 @@ def test_the_art_style_is_never_drawn_as_paper_frame_or_margins():
     prompt = panel_prompt({"style": "woodcut comic, earthy inks on cream paper", "characters": []},
                           {"scene": "Wide shot: Hero in a modest apartment."}, "Hero: teal blazer")
     assert "do not draw the paper, canvas, print, page edges, mat, frame or blank margins around the picture" in prompt
+
+
+def test_a_hand_detail_carries_the_outfit_so_no_gloves_or_other_sleeve_are_invented():
+    prompt = panel_prompt(CAST, {"scene": "Close-up: Hero's hand presses the Notebook shut."}, "Hero: teal blazer, white tee")
+    assert "It belongs to this character (Hero: teal blazer, white tee)" in prompt
+    assert "outfit's sleeve, cuff and hand as on the character sheet" in prompt
+    assert "no gloves, straps, wraps, bracelets, rings or a different sleeve" in prompt
+    feet = panel_prompt(CAST, {"scene": "Close-up: Hero's boots splash through the puddle."}, "Hero: teal blazer")
+    assert "outfit's trouser legs, socks and footwear" in feet
+
+
+@pytest.mark.parametrize("scene", [
+    # 3cef9bb5 p9 pn2 and p4 pn3, found by the dry run over every stored scene
+    "Close-up: Hero's hands hold the open city map centered in frame, while his face and torso stay out of shot.",
+    "Close-up: Close-up on Hero's hand steadying the small golden pendant, teal blazer cuff visible at frame edge.",
+    "Close-up: Only Hero's hands visible holding the small golden amulet.",
+])
+def test_limb_details_written_other_ways_are_still_limb_details(scene):
+    assert {"subject": "frame", "attribute": "framing", "expected": "hand_detail_only"} in scene_requirements(scene)
+
+
+def test_a_face_that_stays_in_shot_keeps_a_normal_close_up():
+    assert not any(r["attribute"] == "framing" for r in scene_requirements(
+        "Close-up: Hero's hand reaches toward the fog, eyes wide with curiosity and mouth slightly open."))

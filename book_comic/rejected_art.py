@@ -88,6 +88,9 @@ def failure_reasons(found: Dict, prompt: str = "", requirements: Sequence[Dict] 
         reasons.append(text)
         if len(reasons) == MAX_REASONS:
             break
+    if not reasons and failed_checks(found):
+        # The check failed the draw without a usable observation: say so, so the rejection can still be reviewed.
+        reasons.append("no observation returned for: " + ", ".join(failed_checks(found)))
     return reasons
 
 

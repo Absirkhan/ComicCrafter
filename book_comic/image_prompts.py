@@ -3,12 +3,13 @@
 None of the lettering (captions, dialogue, titles) is ever sent to the image model.
 """
 
-from typing import Dict, Sequence
+from typing import Dict, Optional, Sequence, Tuple
 
 from book_comic.scene_requirements import scene_requirements
-from book_comic.comic_rules import ANATOMY_RULE, NO_TEXT_RULE, OUTFIT_LOCK, PANEL_RULES, SINGLE_IMAGE_RULE, crowd_rule, props_rule
+from book_comic.comic_rules import ANATOMY_RULE, NO_TEXT_RULE, OUTFIT_LOCK, bare_hands, PANEL_RULES, SINGLE_IMAGE_RULE, crowd_rule, props_rule
 from book_comic.framing import detail_framing, framing_block
 from book_comic.lettering_space import lettering_space
+from book_comic.margins import drawable_style
 
 NO_TEXT = (
     "a single full-bleed illustration filling the whole canvas edge to edge: no border, no frame, "
@@ -36,9 +37,16 @@ PANEL_CRAFT = (
     "When the scene names an action that changes an object's state (closes, opens, lifts, folds, unfolds, lights, "
     "switches on or off), draw the instant just after it completes: the object is already in its new state. "
     "A prop or garment the scene calls hidden, tucked away, pocketed, stowed, packed, under clothing or out of "
-    "sight is not drawn at all: never in a hand, under an arm or in view. "
+    "sight is not drawn at all: never in a hand or in view. A prop held, carried or tucked under an arm is "
+    "visible: draw it exactly there. "
     f"{OUTFIT_LOCK}{ANATOMY_RULE}"
 )
+
+
+def _props_text(cast: Dict, scene: str) -> str:
+    """The props this scene shows: a Power Gauntlet prop waives bare hands only where the scene names it."""
+    return " ".join(f"{p.get('name', '')} {p.get('look', '')}" for p in cast.get("props") or []
+                    if p.get("name") and p["name"].lower() in scene.lower())
 
 
 def describe_references(roles: Sequence[str]) -> str:
@@ -68,7 +76,24 @@ SPLASH = (
 )
 
 
-def panel_prompt(cast: Dict, panel: Dict, people: str, roles: Sequence[str] = (), splash: bool = False) -> str:
+def canvas_shape(size: Optional[Tuple[int, int]]) -> str:
+    """The frame's shape, so a full-body figure in a wide strip is not drawn as an upright picture centred on blank
+    paper (e35347af panel 1: three draws, each a portrait print in the middle of a 2:1 panel)."""
+    if not size or not size[1]:
+        return ""
+    ratio = size[0] / size[1]
+    if ratio >= 1.25:
+        return (f"Canvas: a landscape frame about {ratio:.1f} times as wide as it is tall. Compose horizontally: the "
+                "setting spreads across the full width to both side edges, with the whole figure standing inside it "
+                "(smaller if needed to fit head to feet); never a narrower upright picture in the middle.\n")
+    if ratio <= 0.8:
+        return (f"Canvas: a portrait frame about {1 / ratio:.1f} times as tall as it is wide. The setting fills the "
+                "full height and width to every edge.\n")
+    return ""
+
+
+def panel_prompt(cast: Dict, panel: Dict, people: str, roles: Sequence[str] = (), splash: bool = False,
+                 size: Optional[Tuple[int, int]] = None) -> str:
     """Prompt for one story panel, or with splash=True for a full-page splash panel.
 
     Args:
@@ -79,8 +104,15 @@ def panel_prompt(cast: Dict, panel: Dict, people: str, roles: Sequence[str] = ()
     """
     requirements = scene_requirements(panel['scene'], panel.get('requirements', []))
     crop = framing_block(cast, panel, requirements)
-    if detail_framing(requirements):
-        people = "Only the specified limb is visible. Preserve its skin, age and relevant clothing details from references; do not draw the whole character."
+    limb = detail_framing(requirements)
+    if limb:
+        # A limb-only crop hides the outfit, and the model then invents one for the hand (gloves, straps, another
+        # sleeve: e35347af panel 3). Carry the character's look into the crop.
+        worn = "sleeve, cuff and hand" if limb == "hand_detail_only" else "trouser legs, socks and footwear"
+        people = (f"Only the specified limb is visible. It belongs to this character ({people or 'Hero'}): draw exactly that "
+                  f"outfit's {worn} as on the character sheet, same colour and material. Bare skin unless that "
+                  "description includes gloves; no gloves, straps, wraps, bracelets, rings or a different sleeve. "
+                  "Preserve its skin tone and age from the references; do not draw the whole character.")
     calm_area = SPLASH if splash else lettering_space(panel, requirements)
     kind = "Full-page comic splash panel" if splash else "Comic book panel"
     previous = ""
@@ -91,9 +123,10 @@ def panel_prompt(cast: Dict, panel: Dict, people: str, roles: Sequence[str] = ()
             "Preserve world continuity while changing the pose and framing to match this scene. "
         )
     return (
-        f"{crop}{calm_area}{kind}. Art style: {cast.get('style', 'detailed comic book art')}.\n"
+        f"{crop}{canvas_shape(size)}{calm_area}{kind}. Art style: {drawable_style(cast.get('style')) or 'detailed comic book art'}.\n"
         f"Scene: {panel['scene']}\n"
         f"Characters (draw exactly as described): {people or 'none'}\n"
+        f"{bare_hands(people, panel['scene'], _props_text(cast, panel['scene']))}"
         f"{crowd_rule(panel['scene'])}{describe_references(roles)}{previous}{PANEL_CRAFT}{PANEL_RULES}{props_rule(cast)}"
         f"{acceptance_prompt(requirements, cast.get('prop_anchors'))}"
         "Keep the requested shot distance and all focal action visible. "
@@ -112,7 +145,8 @@ def sheet_prompt(cast: Dict, character: Dict, roles: Sequence[str] = ()) -> str:
         "proportions, including intentional exaggeration, while retaining the specified age cues and likeness. "
         "Use one coherent illustrated medium, clean facial detail and a few crisp clothing and "
         f"hair details. Character: {character.get('name_en', '')}: {character.get('look', '')}. "
-        f"Style: {cast.get('style', 'detailed comic book art')}. {ANATOMY_RULE}{NO_TEXT_RULE}"
+        f"{bare_hands(character.get('look', ''))}"
+        f"Style: {drawable_style(cast.get('style')) or 'detailed comic book art'}. {ANATOMY_RULE}{NO_TEXT_RULE}"
     )
 
 
@@ -128,8 +162,9 @@ def cover_prompt(cast: Dict, cover: Dict, roles: Sequence[str] = ()) -> str:
             "The cover stays one single scene. "
         )
     return (
-        f"Full-page portrait comic illustration. Art style: {cast.get('style', 'detailed comic book art')}. "
+        f"Full-page portrait comic illustration. Art style: {drawable_style(cast.get('style')) or 'detailed comic book art'}. "
         f"Scene: {cover.get('scene', '')} Main character: {hero.get('name_en', '')}: {hero.get('look', '')} "
+        f"{bare_hands(hero.get('look', ''), cover.get('scene', ''), _props_text(cast, cover.get('scene', '')))}"
         f"{describe_references(roles)}{strip}"
         "Show the emotion clearly in the eyes and mouth. Build a clear focal hierarchy around the main character's "
         "face, gesture and the story's meaningful prop or clue. Make the silhouette readable at thumbnail size, with "

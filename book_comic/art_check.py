@@ -10,6 +10,7 @@ from PIL import Image, ImageOps
 from book_comic.best_draw import fallback_verification, pick_fallback
 from book_comic.comic_rules import ANATOMY_RULE, NO_TEXT_RULE, SEAM_CORRECTION, SINGLE_IMAGE_RULE, prop_shape
 from book_comic.lettering_space import CHECK_NOTE, useful_corrections
+from book_comic.margins import MARGIN_CORRECTION, target_aspect, trim_margins
 from book_comic.rejected_art import report as report_rejected, report_selected
 from generation.openrouter_image_client import OpenRouterImageClient
 from generation.vision_client import VisionClient
@@ -200,9 +201,17 @@ def draw_checked(
     redraw, negative, rejected = "", None, []
     for draw in range(1, MAX_DRAWS + 1):
         art = request_art(images, f"{prompt} {redraw}".rstrip() if redraw else prompt, references, aspect_ratio, negative)
+        # Paper margins (a print drawn on paper) are cut off before the check when the picture still fills the
+        # panel; a picture too far from the panel's shape is redrawn, whole (cropping it would cut off the subject).
+        # Only a sized panel: a character sheet is drawn on a plain background on purpose.
+        trimmed, margins = trim_margins(art, target_aspect(size, aspect_ratio)) if size is not None else (art, None)
+        if margins == "trimmed":
+            art = trimmed
         if size is not None:
             art = ImageOps.fit(art, size, Image.Resampling.LANCZOS)
         found = inspect_art(art, vision, references=references, context=prompt, requirements=requirements, props=props, anchors=anchors)
+        if margins == "redraw":
+            found = {**found, "scene_mismatch": True, "corrections": [*(found.get("corrections") or []), MARGIN_CORRECTION]}
         report = {"accepted": None, "requirements": requirements, "checks": found}
         if audit is not None:
             audit.append(report)
@@ -226,7 +235,7 @@ def draw_checked(
         if found.get("requirement_mismatch") or found.get("prop_mismatch") or found.get("prop_shape_mismatch"):
             redraw += " Correct the exact visible states and canonical prop details. " + json.dumps({"required": requirements, "canonical": anchors or {}, "observed_errors": failed})
         negative = REDRAW_NEGATIVE
-        if found.get('seam'):
+        if found.get('seam') or margins == "redraw":
             redraw += " " + SINGLE_IMAGE_RULE
         corrections = useful_corrections(found.get('corrections'))
         if corrections:

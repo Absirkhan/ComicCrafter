@@ -11,6 +11,7 @@ from typing import Dict, Optional, Sequence
 
 from PIL import Image, ImageOps
 
+from book_comic.margins import trim_margins
 from book_comic.scene_requirements import scene_requirements
 from book_comic.art_check import ArtCheckError, inspect_art, request_art, require_checked
 from book_comic.cover_lettering import CoverFonts, letter_cover
@@ -105,7 +106,11 @@ def render_cover(
     prompt = cover_prompt({**cast, "prop_anchors": prop_anchors or {}}, {**cover, "requirements": requirements}, roles)
 
     for draw in range(1, ATTEMPTS + 1):
-        art = ImageOps.fit(request_art(images, prompt, references, closest_aspect_ratio(*size)), size)
+        art = request_art(images, prompt, references, closest_aspect_ratio(*size))
+        trimmed, margins = trim_margins(art, size[0] / size[1])
+        if margins == "redraw" and draw < ATTEMPTS:
+            continue
+        art = ImageOps.fit(trimmed if margins == "trimmed" else art, size)
         seam = find_seam(art)
         if seam is not None:
             art = ImageOps.fit(art.crop((0, seam, art.width, art.height)), size, centering=(0.5, 0.0))

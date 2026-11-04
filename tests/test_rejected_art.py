@@ -50,7 +50,8 @@ def test_a_rejected_then_accepted_panel_writes_one_pair(tmp_path):
     assert sorted(p.name for p in out.iterdir()) == ["panel_p1_d1.json", "panel_p1_d1.png"]
     assert Image.open(out / "panel_p1_d1.png").getpixel((0, 0)) == RED  # the rejected art, not the accepted one
     assert records(out)["panel_p1_d1.json"] == {"stage": "panel", "panel": 1, "draw": 1,
-                                                "failed_checks": ["has_text", "bad_anatomy"], "reasons": []}
+                                                "failed_checks": ["has_text", "bad_anatomy"],
+                                                "reasons": ["no observation returned for: has_text, bad_anatomy"]}
 
 
 def test_cover_and_sheet_rejects_are_stage_cover_and_sheet_panel_0(tmp_path):
@@ -62,8 +63,8 @@ def test_cover_and_sheet_rejects_are_stage_cover_and_sheet_panel_0(tmp_path):
     render_cover(CAST, {"scene": SCENE, "title": "T"}, (400, 600), tmp_path / "cover.png", images,
                  judge({RED: {"has_text": True}}), on_reject=r.rejected.hook("cover"))
     assert records(out) == {
-        "cover_p0_d1.json": {"stage": "cover", "panel": 0, "draw": 1, "failed_checks": ["has_text"], "reasons": []},
-        "sheet_p0_d1.json": {"stage": "sheet", "panel": 0, "draw": 1, "failed_checks": ["identity_mismatch"], "reasons": []},
+        "cover_p0_d1.json": {"stage": "cover", "panel": 0, "draw": 1, "failed_checks": ["has_text"], "reasons": ["no observation returned for: has_text"]},
+        "sheet_p0_d1.json": {"stage": "sheet", "panel": 0, "draw": 1, "failed_checks": ["identity_mismatch"], "reasons": ["no observation returned for: identity_mismatch"]},
     }
 
 

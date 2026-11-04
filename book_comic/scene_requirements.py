@@ -5,7 +5,7 @@ import re
 _HAND_FOCUS = re.compile(
     r"\b(hands?)[ -]detail\b|\bdetail (?:shot )?of (?:\w+'s |his |her |their |the |a |one )?(?:right |left )?(hands?)\b"
     r"|\bclose-up of (?:\w+'s |his |her |their |the |a |one )?(?:right |left )?(hands?)\b"
-    r"|^\s*(?:extreme )?close-up(?::| on| of)\s*(?:\w+'s|his|her|their|the|one|a)\s+(?:right |left |gloved |bare |open |clenched )?"
+    r"|^\s*(?:(?:extreme )?close-up\s*(?::|on\b|of\b)?\s*)+(?:only\s+)?(?:\w+'s|his|her|their|the|one|a)\s+(?:right |left |gloved |bare |open |clenched )?"
     r"(hands?|fingers?|fingertips?|palms?|fists?|wrists?|feet|foot|toes?|boots?|shoes?|sneakers?|sandals?)\b", re.I)
 # A limb-detail word and the crop it asks for: hands, fingers, palms, fists and wrists are a hand detail; feet,
 # toes and footwear a feet detail.
@@ -15,6 +15,8 @@ _FEET_WORDS = re.compile(r"^(?:feet|foot|toes?|boots?|shoes?|sneakers?|sandals?)
 _DIRECTION = re.compile(r"\bExpression and body language:", re.I)
 _BODY_WORDS = re.compile(r"\b(face|faces|head|eyes|torso|chest|shoulders?|waist|body|expression|smile|smiles)\b", re.I)
 _NEGATED_BODY = re.compile(r"\b(?:no|without|not|excluding|never)\b[^.!?]{0,40}?$", re.I)
+# "his face and torso stay out of shot": a body part the scene itself puts outside the crop.
+_EXCLUDED_AFTER = re.compile(r"^[^.!?]{0,40}?\b(?:out of (?:shot|frame|view|the frame)|off[- ](?:panel|frame|screen)|outside the (?:frame|crop|shot)|not visible|cropped out|kept out)\b", re.I)
 
 
 class _Tag:
@@ -37,7 +39,7 @@ def _hand_focus(scene):
     if not match:
         return None
     for body in _BODY_WORDS.finditer(scene):
-        if not _NEGATED_BODY.search(scene[:body.start()]):
+        if not _NEGATED_BODY.search(scene[:body.start()]) and not _EXCLUDED_AFTER.search(scene[body.end():]):
             return None
     word = next(g for g in match.groups() if g)
     return _Tag('feet' if _FEET_WORDS.match(word) else 'hand')
