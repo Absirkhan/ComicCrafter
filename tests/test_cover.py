@@ -113,10 +113,31 @@ def test_cover_title_always_fits_one_line():
 
 def test_rejected_and_unchecked_covers_never_publish(tmp_path):
     for answer, code, calls in [({}, 'comic_art_check_unavailable', 1),
-                                 ({'head_top': 400, 'has_text': True, 'bad_anatomy': False, 'identity_mismatch': False, 'design_mismatch': False, 'scene_mismatch': False}, 'comic_cover_rejected', 2)]:
+                                 ({'head_top': 400, 'has_text': True, 'bad_anatomy': False, 'identity_mismatch': False, 'design_mismatch': False, 'scene_mismatch': False}, 'comic_cover_rejected', 3)]:
         path = tmp_path / 'cover.png'
         images = FakeImages([Image.new('RGB', (400, 600), 'blue')])
         with pytest.raises(ValueError, match=code):
             render_cover(CAST, COVER, (400, 600), path, images, FakeVision(lambda p, i: answer))
         assert len(images.calls) == calls
         assert not path.exists()
+
+
+def test_a_cover_whose_three_draws_all_drift_keeps_the_least_bad_one(tmp_path):
+    """Soft drift only (no readable text, anatomy, face or seam): the page is not lost for the cover."""
+    base = {'head_top': 400, 'has_text': False, 'bad_anatomy': False, 'identity_mismatch': False, 'design_mismatch': False}
+    answers = iter([{**base, 'scene_mismatch': True, 'design_mismatch': True}, {**base, 'scene_mismatch': True},
+                    {**base, 'scene_mismatch': True, 'design_mismatch': True}])
+    images = FakeImages([Image.new('RGB', (400, 600), c) for c in ('red', 'green', 'blue')])
+    audit = []
+    path = tmp_path / 'cover.png'
+    render_cover(CAST, COVER, (400, 600), path, images, FakeVision(lambda p, i: next(answers)), audit=audit)
+    assert path.exists() and len(images.calls) == 3
+    assert [r.get('fallback') for r in audit if r.get('kind') == 'cover'] == [None, True, None]
+
+
+def test_a_cover_with_readable_text_on_every_draw_is_still_never_published(tmp_path):
+    answer = {'head_top': 400, 'has_text': True, 'text_prominent': True, 'bad_anatomy': False,
+              'identity_mismatch': False, 'design_mismatch': False, 'scene_mismatch': False}
+    with pytest.raises(ValueError, match='comic_cover_rejected'):
+        render_cover(CAST, COVER, (400, 600), tmp_path / 'c.png', FakeImages([Image.new('RGB', (400, 600), 'blue')]),
+                     FakeVision(lambda p, i: answer))
