@@ -33,6 +33,10 @@ PANEL_CRAFT = (
     "copies of a character. Do not invent scars, moles, jewelry or costume changes that are not described. "
     "No accessories beyond the approved appearance (gloves, jewellery, necklaces, pendants, watches, hats, bags) "
     "unless the scene introduces them. "
+    "When the scene names an action that changes an object's state (closes, opens, lifts, folds, unfolds, lights, "
+    "switches on or off), draw the instant just after it completes: the object is already in its new state. "
+    "A prop or garment the scene calls hidden, tucked away, pocketed, stowed, packed, under clothing or out of "
+    "sight is not drawn at all: never in a hand, under an arm or in view. "
     f"{OUTFIT_LOCK}{ANATOMY_RULE}"
 )
 

@@ -110,7 +110,7 @@ def test_quiet_places_get_no_crowd_line():
 def test_props_appear_once_and_no_unapproved_accessories():
     cast = {**CAST, "props": [{"name": "Amulet", "look": "round silver amulet"}]}
     prompt = panel_prompt(cast, {"scene": "Medium shot: Hero holds the Amulet."}, "Hero: teal blazer")
-    assert "Each story prop appears exactly once, in the state the scene says: held or worn, never both" in prompt
+    assert "Each story prop the scene shows appears exactly once, in the state the scene says: held or worn, never both" in prompt
     assert "No accessories beyond the approved appearance (gloves, jewellery, necklaces, pendants, watches, hats, bags)" in prompt
 
 
