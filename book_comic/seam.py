@@ -12,15 +12,12 @@ from PIL import Image, ImageOps
 
 STRIP = 0.15  # a stacked strip is a band across the top; fitting the rest back to size crops at most this share of the width
 THIN = 0.02  # a seam is at most this share of the height; thicker flat bands are sky, floor or a wall
-SCAN_WIDTH = 512  # row flatness is a coarse property: scanned on a reduced copy, rows mapped back
 
 
 def _runs(image: Image.Image) -> Tuple[List[Tuple[int, int]], int]:
-    """(start, end) of every thin flat full-width run with textured art on both sides, and the height (full-size rows)."""
+    """(start, end) of every thin flat full-width run with textured art on both sides, and the height."""
     import numpy as np
-    scale = max(1, image.width // SCAN_WIDTH)
-    small = image.convert("RGB").reduce(scale) if scale > 1 else image.convert("RGB")
-    flat = np.asarray(small, dtype=np.float32).std(axis=1).max(axis=1) < 20
+    flat = np.asarray(image.convert("RGB"), dtype=np.float32).std(axis=1).max(axis=1) < 20
     h = len(flat)
     thin, gap = max(3, int(h * THIN)), max(2, h // 300)
     y, runs = gap, []
@@ -32,9 +29,9 @@ def _runs(image: Image.Image) -> Tuple[List[Tuple[int, int]], int]:
         while run_end < h and flat[run_end]:
             run_end += 1
         if run_end - y <= thin and run_end + gap < h and not flat[y - gap] and not flat[run_end + gap]:
-            runs.append((y * scale, run_end * scale))
+            runs.append((y, run_end))
         y = run_end + 1
-    return runs, h * scale
+    return runs, h
 
 
 def find_seam(image: Image.Image, search_share: float = 0.45) -> Optional[int]:

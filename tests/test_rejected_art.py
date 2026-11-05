@@ -130,14 +130,15 @@ def test_a_one_word_requirement_answer_reads_expected_versus_seen(tmp_path):
     requirements = [{"subject": "the journal", "attribute": "state", "expected": "open"},
                     {"subject": "Hero", "attribute": "framing", "expected": "hand_detail_only"},
                     {"subject": "Dana", "attribute": "design", "expected": "teal blazer"}]
+    # The framing row never reaches the checker (draw_checked checks without it), so the answer has two rows, and the
+    # design row's index 1 must pair with the design requirement, not with the framing row it replaced.
     answer = {**CLEAN, "requirement_mismatch": True,
               "requirement_checks": [{"index": 0, "observed": "closed", "matches": False},
-                                     {"index": 1, "observed": "body_visible", "matches": False},
-                                     {"index": 2, "observed": "military jacket", "matches": False}]}
+                                     {"index": 1, "observed": "military jacket", "matches": False}]}
     draws = iter([answer, {k: v for k, v in CLEAN.items() if k not in ("requirement_checks", "prop_checks")}])  # FakeVision fills a shared CLEAN in place
     saver = RejectedArtSaver(out, names=["Dana"])
     draw_checked(FakeImages(colours("red", "blue")), FakeVision(lambda p, i: next(draws)), SCENE, [], "2:3",
                  requirements=requirements, on_reject=saver.hook("panel", 2))
     reasons = records(out)["panel_p2_d1.json"]["reasons"]
-    assert reasons == ["state: expected open, saw closed", "military jacket"]  # a framing row is observed only, never a reason
+    assert reasons == ["state: expected open, saw closed", "military jacket"]  # one index space without the framing row
     assert "journal" not in json.dumps(reasons) and "teal blazer" not in json.dumps(reasons)
