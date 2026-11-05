@@ -38,7 +38,7 @@ class ArtCheckError(ValueError):
 
 
 def inspect_art(image: Image.Image, vision: VisionClient, references=(), context="", requirements=(), props=(), anchors=None,
-                setting: bool = False) -> Dict[str, Optional[object]]:
+                setting: bool = False, keep_faint_text: bool = True) -> Dict[str, Optional[object]]:
     """Inspect the candidate and, in the same vision call, compare it to its references.
 
     setting: the art must show a place with nobody in it (a back cover); adds figure_visible.
@@ -152,8 +152,7 @@ def inspect_art(image: Image.Image, vision: VisionClient, references=(), context
                     if requirement["attribute"] in ("pose", "state") and expected in literal_states and observed != expected:
                         mismatch = True  # explicit state contradictions cannot be waved through by matches=true
                 found["requirement_mismatch"] = mismatch
-                # A framing row is observed only (see above): marked soft so prompts and audits never treat it as unmet.
-                found["requirement_checks"] = [{**ordered[i], **({"soft": True} if requirements[i]["attribute"] == "framing" else {})} for i in range(len(requirements))]
+                found["requirement_checks"] = [ordered[i] for i in range(len(requirements))]
     if props:
         checks = answer.get("prop_checks")
         if isinstance(checks, list) and len(checks) == len(props):
@@ -168,10 +167,10 @@ def inspect_art(image: Image.Image, vision: VisionClient, references=(), context
     people, hands = answer.get("people"), answer.get("hands_visible")
     if all(isinstance(n, (int, float)) and not isinstance(n, bool) and math.isfinite(n) for n in (people, hands)) and people > 0 and hands > 2 * people:
         found["bad_anatomy"] = True
-    if context and found.get("has_text") and found.get("text_prominent") is False:
+    if keep_faint_text and found.get("has_text") and found.get("text_prominent") is False:
         # Tiny, illegible pseudo-lettering (a distant sign's glyphs) is not what a reader notices: kept, never redrawn,
         # on panels and covers; prominent or unrated writing stays has_text (book_comic.best_draw). The character sheet
-        # (no brief) stays strict: glyphs baked into it would be copied into every panel.
+        # passes keep_faint_text=False (draw_checked strict_text): glyphs baked into it would be copied into every panel.
         found = {**found, "has_text": False, "faint_text": True}
     return found
 
@@ -182,7 +181,7 @@ def _valid_evidence(check, allow_hidden=False):
 
 
 def require_checked(found, require_head=False):
-    flags = [v for k, v in found.items() if k not in ("head_top", "text_prominent", "requirement_checks", "prop_checks", "corrections", "seam", "gloves", "faint_text")]
+    flags = [v for k, v in found.items() if k not in ("head_top", "text_prominent", "requirement_checks", "prop_checks", "corrections", "seam", "gloves", "faint_text", "margins_redraw")]
     if any(type(v) is not bool for v in flags) or (require_head and found["head_top"] is None):
         raise ArtCheckError("comic_art_check_unavailable")
     return not any(flags)
@@ -209,6 +208,7 @@ def draw_checked(
     aspect_ratio: str,
     size=None,
     requirements=(), props=(), anchors=None, audit=None, on_reject=None, framing="", fallback=False, on_select=None,
+    strict_text=False,
 ) -> Image.Image:
     """Bounded redraws for explicit defects only. Unchecked or rejected art is never returned.
 
@@ -221,13 +221,17 @@ def draw_checked(
     on_select(draw), when given, is told which 1-based draw was kept.
     """
     redraw, negative, rejected, redraw_parts = "", None, [], []
+    # A limb-only framing row is observed only, never enforced: it stays out of the check, the revision and the
+    # redraw (the panel prompt still asks for the crop; the report keeps the full list for the audit).
+    checked = [r for r in requirements if r.get("attribute") != "framing"]
     for draw in range(1, MAX_DRAWS + 1):
         # Draw 2 revises the rejected draw 1 (book_comic.revise); draw 3 re-rolls from scratch with the corrections.
-        revised = draw == 2 and bool(rejected)
+        # A draw rejected for its shape (paper margins) has nothing worth revising: draw 2 re-rolls instead.
+        revised = draw == 2 and bool(rejected) and not rejected[-1][1].get("margins_redraw")
         if revised:
             previous_art, previous_found, _ = rejected[-1]
             extra = ["Repeat of the required framing: " + " ".join(framing.split()) if framing and (previous_found.get("scene_mismatch") or previous_found.get("requirement_mismatch")) else ""]
-            art = request_art(images, revision_prompt(prompt, previous_found, extra, requirements, anchors), [*references, data_url(previous_art)], aspect_ratio, negative)
+            art = request_art(images, revision_prompt(prompt, previous_found, extra, checked, anchors), [*references, data_url(previous_art)], aspect_ratio, negative)
         else:
             art = request_art(images, f"{prompt} {redraw}".rstrip() if redraw else prompt, references, aspect_ratio, negative)
         # Paper margins (a print drawn on paper) are cut off before the check when the picture still fills the
@@ -241,9 +245,10 @@ def draw_checked(
         seam_cut = size is not None and (cut := cut_seam(art, size)) is not None
         if seam_cut:
             art = cut  # a strip stacked over or under the scene is cut off locally instead of spending a redraw
-        found = inspect_art(art, vision, references=references, context=prompt, requirements=requirements, props=props, anchors=anchors)
+        found = inspect_art(art, vision, references=references, context=prompt, requirements=checked, props=props, anchors=anchors,
+                            keep_faint_text=not strict_text)
         if margins == "redraw":
-            found = {**found, "scene_mismatch": True, "corrections": [*(found.get("corrections") or []), MARGIN_CORRECTION]}
+            found = {**found, "scene_mismatch": True, "margins_redraw": True, "corrections": [*(found.get("corrections") or []), MARGIN_CORRECTION]}
         if unasked_gloves(found, prompt):
             found = {**found, "gloves": True}
         report = {"accepted": None, "requirements": requirements, "checks": found, **({"revised": True} if revised else {}), **({"seam_cut": True} if seam_cut else {})}
@@ -264,11 +269,11 @@ def draw_checked(
         part = ((NO_TEXT_RULE if found["has_text"] else "") + (f" {ANATOMY_RULE}" if found["bad_anatomy"] else "")).strip()
         if any(found.get(k) for k in ("identity_mismatch", "design_mismatch", "scene_mismatch")):
             part += " Match the established reference identity, proportions, style, outfit and object construction. Follow the exact planned shot and action."
-        failed = failed_requirements(found, requirements)
+        failed = failed_requirements(found, checked)
         if framing and (found.get("scene_mismatch") or found.get("requirement_mismatch")):
             part += " Repeat of the required framing: " + " ".join(framing.split())
         if found.get("requirement_mismatch") or found.get("prop_mismatch") or found.get("prop_shape_mismatch"):
-            part += " Correct the exact visible states and canonical prop details. " + json.dumps({"required": requirements, "canonical": anchors or {}, "observed_errors": failed})
+            part += " Correct the exact visible states and canonical prop details. " + json.dumps({"required": checked, "canonical": anchors or {}, "observed_errors": failed})
         negative = REDRAW_NEGATIVE
         if found.get('seam') or margins == "redraw":
             part += " " + SINGLE_IMAGE_RULE

@@ -172,8 +172,17 @@ def cover_scene(scene: str) -> str:
     shot = scene_shot(scene)
     bare = scene.strip()[len(shot) + 1:].strip() if shot else scene
     # "only his hands visible", "a boot at the edge of the frame": the clause goes, the cover shows the hero.
-    clauses = [c for c in re.split(r"(?<=[,;])\s+", bare) if not _LIMB_CLAUSE.search(c)]
-    return re.sub(r"[,;]\s*(?=[.!?]|$)", "", " ".join(clauses)).strip() if clauses else bare
+    kept = []
+    for clause in re.split(r"(?<=[.,;!?])\s+", bare):
+        if not _LIMB_CLAUSE.search(clause):
+            kept.append(clause)
+        elif kept and clause.rstrip()[-1:] in ".!?" and kept[-1].rstrip()[-1:] in ",;":
+            kept[-1] = kept[-1].rstrip()[:-1] + "."  # the dropped clause closed the sentence: the one before it does now
+    if not kept:
+        return bare
+    text = " ".join(kept)
+    text = re.sub(r"[,;]\s*(?=[.!?]|$)", "", text)  # a dangling separator before the end
+    return re.sub(r"(?<=[.!?]\s)([a-z])", lambda m: m.group(1).upper(), text).strip()  # a clause now opening a sentence
 
 
 _LIMB_CLAUSE = re.compile(r"\bonly\b[^.;]{0,40}?\b(?:hands?|fingers?|palms?|fists?|wrists?|arms?|feet|foot|boots?|shoes?|legs?)\b[^.;]{0,40}?"

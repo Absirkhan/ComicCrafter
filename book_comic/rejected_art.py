@@ -9,7 +9,7 @@ requirement text and character names never reach the JSON. Saving never changes 
 import json
 import logging
 from pathlib import Path
-from typing import Dict, Iterable, List, Optional, Sequence
+from typing import Dict, Iterable, List, Optional, Sequence, Tuple
 
 from PIL import Image
 
@@ -57,12 +57,24 @@ def _requirement_reason(check: Dict, requirement: Dict) -> object:
     return observed
 
 
+def unmet_requirements(found: Dict, requirements: Sequence[Dict]) -> List[Tuple[Dict, Dict]]:
+    """(check, requirement) for every row the check saw unmet, the rows paired by the check's own index.
+
+    The one definition shared by the rejected-art reasons, the revision and the fresh third draw: a row fails when
+    the checker says so, when the state is hidden, or when a literal contradiction (hand side, pose, state) was waved
+    through with matches=true; a framing row never fails (observed only)."""
+    pairs = []
+    for check in found.get("requirement_checks") or []:
+        index = check.get("index") if isinstance(check, dict) else None
+        if type(index) is int and 0 <= index < len(requirements) and _requirement_failed(check, requirements[index]):
+            pairs.append((check, requirements[index]))
+    return pairs
+
+
 def _candidates(found: Dict, requirements: Sequence[Dict]) -> Iterable[object]:
     if found.get("requirement_mismatch"):
-        for check in found.get("requirement_checks") or []:
-            index = check.get("index") if isinstance(check, dict) else None
-            if type(index) is int and 0 <= index < len(requirements) and _requirement_failed(check, requirements[index]):
-                yield _requirement_reason(check, requirements[index])
+        for check, requirement in unmet_requirements(found, requirements):
+            yield _requirement_reason(check, requirement)
     if found.get("prop_mismatch") or found.get("prop_shape_mismatch"):
         for check in found.get("prop_checks") or []:
             if isinstance(check, dict) and check.get("visible") is True and check.get("matches") is False:
