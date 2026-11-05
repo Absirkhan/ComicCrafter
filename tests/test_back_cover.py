@@ -57,13 +57,37 @@ def test_a_figure_is_redrawn_and_the_empty_setting_is_lettered(tmp_path, monkeyp
     assert (tmp_path / "back.png").exists()
 
 
-def test_three_draws_with_people_fail_the_back_cover(tmp_path, monkeypatch):
+def test_three_draws_with_people_fall_back_to_the_blurred_front_cover(tmp_path, monkeypatch):
+    monkeypatch.setattr(back_module, "find_seam", lambda art: None)
+    kept = []
+    monkeypatch.setattr(back_module, "letter_back_cover", lambda art, back, fonts: kept.append(art) or art)
+    images = FakeImages([Image.new("RGB", (400, 600), "grey")])
+    vision = FakeVision(lambda prompt, image: {"has_text": False, "bad_anatomy": False, "figure_visible": True})
+    front = Image.new("RGB", (400, 600), (200, 100, 50))
+    audit = []
+    render_back_cover(CAST, BACK, (400, 600), tmp_path / "back.png", images, vision, style_art=front, audit=audit)
+    assert len(images.calls) == 3
+    assert kept[0].size == (400, 600) and kept[0].getpixel((200, 300)) == (120, 60, 30)  # the front, darkened
+    assert audit[-1]["fallback"] == "front_blur"
+
+
+def test_without_a_front_cover_three_draws_with_people_fail(tmp_path, monkeypatch):
     monkeypatch.setattr(back_module, "find_seam", lambda art: None)
     images = FakeImages([Image.new("RGB", (400, 600), "grey")])
     vision = FakeVision(lambda prompt, image: {"has_text": False, "bad_anatomy": False, "figure_visible": True})
     with pytest.raises(ArtCheckError, match="comic_back_cover_rejected"):
         render_back_cover(CAST, BACK, (400, 600), tmp_path / "back.png", images, vision)
     assert len(images.calls) == 3
+
+
+def test_a_stacked_strip_is_cut_off_instead_of_drawing_again(tmp_path, monkeypatch):
+    seams = iter([300, None])
+    monkeypatch.setattr(back_module, "find_seam", lambda art: next(seams))
+    monkeypatch.setattr(back_module, "letter_back_cover", lambda art, back, fonts: art)
+    images = FakeImages([Image.new("RGB", (400, 600), "grey")])
+    vision = FakeVision(lambda prompt, image: {"has_text": False, "bad_anatomy": False, "figure_visible": False})
+    render_back_cover(CAST, BACK, (400, 600), tmp_path / "back.png", images, vision)
+    assert len(images.calls) == 1
 
 
 def test_an_unavailable_check_raises(tmp_path, monkeypatch):

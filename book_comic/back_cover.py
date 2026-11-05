@@ -2,13 +2,15 @@
 
 It is drawn after the front cover and takes the unlettered front cover art as a style reference. Nobody may appear:
 a person there has no face check, so a draw with a figure is redrawn and never kept (best_draw.HARD_DEFECTS).
+The back cover never fails the preview: when no draw is usable, the front cover art, blurred and darkened, is its
+background (a local 2026-11-05 run lost a whole preview to pedestrians in a city view).
 """
 
 import logging
 from pathlib import Path
 from typing import Dict, Optional, Sequence
 
-from PIL import Image, ImageOps
+from PIL import Image, ImageEnhance, ImageFilter, ImageOps
 
 from book_comic.art_check import ArtCheckError, inspect_art, request_art, require_checked
 from book_comic.back_cover_lettering import letter_back_cover
@@ -30,6 +32,12 @@ ATTEMPTS = 3
 def _skipped(audit, draw: int, reason: str) -> None:
     if audit is not None:
         audit.append({"accepted": False, "kind": "back_cover", "draw": draw, "skipped": reason, "requirements": [], "checks": {}})
+
+
+def blurred_background(style_art: Image.Image, size: tuple) -> Image.Image:
+    """The front cover art, blurred and darkened: a back cover background that always matches and shows no face."""
+    art = ImageOps.fit(style_art.convert("RGB"), size).filter(ImageFilter.GaussianBlur(max(8, size[0] // 30)))
+    return ImageEnhance.Brightness(art).enhance(0.6)
 
 
 def render_back_cover(
@@ -65,9 +73,12 @@ def render_back_cover(
             _skipped(audit, draw, "margins")
             continue
         art = ImageOps.fit(trimmed if margins == "trimmed" else art, size)
-        if find_seam(art) is not None:
-            _skipped(audit, draw, "seam")
-            continue
+        seam = find_seam(art)
+        if seam is not None:  # cut the stacked strip off, as on the front cover
+            art = ImageOps.fit(art.crop((0, seam, art.width, art.height)), size, centering=(0.5, 0.0))
+            if find_seam(art) is not None:
+                _skipped(audit, draw, "seam")
+                continue
         found = inspect_art(art, vision, setting=True)
         report = {"accepted": None, "requirements": [], "checks": found, "kind": "back_cover"}
         if audit is not None:
@@ -84,11 +95,17 @@ def render_back_cover(
         rejected.append((art, found, report))
     else:
         best = pick_fallback([(a, f) for a, f, _ in rejected])
-        if best is None:
+        if best is not None:
+            art, found, report = rejected[best]
+            report["fallback"] = True
+            logger.warning(f"Back cover: every draw was rejected; keeping the least-bad one (draw {best + 1})")
+        elif style_art is not None:
+            art = blurred_background(style_art, size)
+            if audit is not None:
+                audit.append({"accepted": True, "kind": "back_cover", "fallback": "front_blur", "requirements": [], "checks": {}})
+            logger.warning("Back cover: no usable draw; the blurred front cover is its background")
+        else:
             raise ArtCheckError("comic_back_cover_rejected")
-        art, found, report = rejected[best]
-        report["fallback"] = True
-        logger.warning(f"Back cover: every draw was rejected; keeping the least-bad one (draw {best + 1})")
 
     dpi_tag = {"dpi": (dpi, dpi)} if dpi else {}
     letter_back_cover(art, back, fonts).save(path, format="PNG", optimize=True, **dpi_tag)
