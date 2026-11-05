@@ -39,7 +39,7 @@ def hard_defect(found: Dict) -> bool:
 
 def _rank(found: Dict) -> Tuple[int, int]:
     flags = sum(1 for k in CHECK_NAMES if found.get(k))
-    requirements = sum(1 for c in found.get("requirement_checks", []) if isinstance(c, dict) and c.get("matches") is not True and not c.get("soft"))
+    requirements = sum(1 for c in found.get("requirement_checks", []) if isinstance(c, dict) and c.get("matches") is not True)
     return flags, requirements
 
 

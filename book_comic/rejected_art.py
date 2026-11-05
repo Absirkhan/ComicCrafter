@@ -34,12 +34,17 @@ def _requirement_failed(check: Dict, requirement: Dict) -> bool:
     expected = str(requirement.get("expected", "")).strip().lower()
     if observed == "not_visible" and requirement.get("attribute") == "design":
         return False
-    if check.get("soft") or requirement.get("attribute") == "framing":
+    if requirement.get("attribute") == "framing":
         return False  # a limb-only framing row is observed only, never a reason (art_check.inspect_art)
-    return (check.get("matches") is not True or observed == "not_visible"
-            or (requirement.get("attribute") == "hand" and observed != expected))
+    # A literal contradiction the checker waved through with matches=true: a hand side, or a vocabulary pose/state
+    # word other than the expected one ("standing" for kneeling; free text like "the door is wide open" is not one).
+    literal = (requirement.get("attribute") == "hand"
+               or (requirement.get("attribute") in ("pose", "state") and expected in LITERAL_STATES and observed in LITERAL_STATES))
+    return check.get("matches") is not True or observed == "not_visible" or (literal and observed != expected)
 
 
+# A pose or state the checker cannot wave through with matches=true (art_check.inspect_art uses the same set).
+LITERAL_STATES = {"standing", "kneeling", "seated", "crouching", "open", "closed", "flat", "upright"}
 # The checker's fixed answers for pose, state, hand side and framing: safe to show next to each other.
 VOCABULARY = {"standing", "kneeling", "seated", "crouching", "open", "closed", "flat", "upright", "right", "left",
               "ambiguous", "not_visible", "hand_detail_only", "feet_detail_only", "body_visible"}
@@ -64,9 +69,11 @@ def unmet_requirements(found: Dict, requirements: Sequence[Dict]) -> List[Tuple[
     the checker says so, when the state is hidden, or when a literal contradiction (hand side, pose, state) was waved
     through with matches=true; a framing row never fails (observed only)."""
     pairs = []
-    for check in found.get("requirement_checks") or []:
-        index = check.get("index") if isinstance(check, dict) else None
-        if type(index) is int and 0 <= index < len(requirements) and _requirement_failed(check, requirements[index]):
+    for position, check in enumerate(found.get("requirement_checks") or []):
+        if not isinstance(check, dict):
+            continue
+        index = check.get("index") if type(check.get("index")) is int else position  # a raw list is in the brief's order
+        if 0 <= index < len(requirements) and _requirement_failed(check, requirements[index]):
             pairs.append((check, requirements[index]))
     return pairs
 

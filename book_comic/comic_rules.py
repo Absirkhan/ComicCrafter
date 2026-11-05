@@ -181,8 +181,9 @@ def cover_scene(scene: str) -> str:
     if not kept:
         return bare
     text = " ".join(kept)
-    text = re.sub(r"[,;]\s*(?=[.!?]|$)", "", text)  # a dangling separator before the end
-    return re.sub(r"(?<=[.!?]\s)([a-z])", lambda m: m.group(1).upper(), text).strip()  # a clause now opening a sentence
+    text = re.sub(r"[,;:]\s*(?=[.!?]|$)", "", text).strip()  # a dangling separator before the end
+    text = re.sub(r"(?<=[.!?]\s)([a-z])", lambda m: m.group(1).upper(), text)  # a clause now opening a sentence
+    return text[:1].upper() + text[1:]
 
 
 _LIMB_CLAUSE = re.compile(r"\bonly\b[^.;]{0,40}?\b(?:hands?|fingers?|palms?|fists?|wrists?|arms?|feet|foot|boots?|shoes?|legs?)\b[^.;]{0,40}?"

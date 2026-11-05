@@ -352,7 +352,8 @@ def test_a_draw_rejected_for_paper_margins_gets_a_fresh_roll_not_a_revision(monk
     images = FakeImages(colours("red", "green"))
     art = draw_checked(images, judge({}), "scene", [], "2:3", size=(400, 600))
     assert art.getpixel((0, 0)) == GREEN and len(images.calls) == 2
-    assert REVISE_MARK not in images.calls[1]["prompt"] and "redrawn whole" in images.calls[1]["prompt"].lower() or REVISE_MARK not in images.calls[1]["prompt"]
+    from book_comic.margins import MARGIN_CORRECTION
+    assert REVISE_MARK not in images.calls[1]["prompt"] and MARGIN_CORRECTION in images.calls[1]["prompt"]
 
 
 def test_cover_scene_spares_the_sentences_around_a_limb_clause():
@@ -361,3 +362,24 @@ def test_cover_scene_spares_the_sentences_around_a_limb_clause():
     direction = " Expression and body language: tense, the face when visible shows fear."
     assert cover_scene("Extreme long shot: Hero on a rainy rooftop holding the relic, only his hands visible." + direction) == \
         "Hero on a rainy rooftop holding the relic." + direction
+
+
+def test_a_pose_waved_through_with_matches_true_and_a_raw_row_both_reach_the_revision():
+    from book_comic.revise import failed_requirements
+    from book_comic.rejected_art import unmet_requirements
+    requirements = [{"subject": "Hero", "attribute": "pose", "expected": "kneeling"}, {"subject": "book", "attribute": "state", "expected": "open"}]
+    found = {"requirement_checks": [{"index": 0, "observed": "standing", "matches": True}, {"observed": "closed", "matches": False}]}
+    assert [r["observed"] for _, r in [(c, c) for c, _ in unmet_requirements(found, requirements)]] == ["standing", "closed"]
+    assert [row["required"]["attribute"] for row in failed_requirements(found, requirements)] == ["pose", "state"]
+
+
+def test_the_back_cover_keeps_faint_glyphs_like_any_cover():
+    from book_comic.art_check import inspect_art, require_checked
+    found = inspect_art(Image.new("RGB", (10, 10)), FakeVision(lambda p, i: {**BASE, "head_top": 400, "has_text": True, "text_prominent": False, "figure_visible": False}), setting=True)
+    assert found["faint_text"] is True and require_checked(found) is True
+
+
+def test_cover_scene_opens_with_a_capital_and_drops_a_dangling_colon():
+    from book_comic.comic_rules import cover_scene
+    assert cover_scene("Only his hands visible, gripping the ledge. Hero on a rooftop.") == "Gripping the ledge. Hero on a rooftop."
+    assert cover_scene("Hero waits. Expression and body language: only his hands visible.") == "Hero waits."  # the whole limb clause goes

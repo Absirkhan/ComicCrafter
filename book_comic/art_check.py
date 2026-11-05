@@ -11,7 +11,7 @@ from book_comic.best_draw import fallback_verification, pick_fallback, unasked_g
 from book_comic.comic_rules import ANATOMY_RULE, NO_TEXT_RULE, SEAM_CORRECTION, SINGLE_IMAGE_RULE, prop_shape
 from book_comic.lettering_space import CHECK_NOTE, useful_corrections
 from book_comic.margins import MARGIN_CORRECTION, target_aspect, trim_margins
-from book_comic.rejected_art import report as report_rejected, report_selected
+from book_comic.rejected_art import LITERAL_STATES, report as report_rejected, report_selected
 from book_comic.revise import data_url, failed_requirements, revision_prompt
 from book_comic.seam import cut_seam
 from generation.openrouter_image_client import OpenRouterImageClient
@@ -140,7 +140,6 @@ def inspect_art(image: Image.Image, vision: VisionClient, references=(), context
                 for i, requirement in enumerate(requirements):
                     check = ordered[i]
                     expected, observed = requirement["expected"].strip().lower(), check["observed"].strip().lower()
-                    literal_states = {"standing", "kneeling", "seated", "crouching", "open", "closed", "flat", "upright"}
                     if requirement["attribute"] == "framing":
                         continue  # observed only: no image model holds a limb-only crop, and a reader keeps the fuller draw
                     if requirement["attribute"] == "hand" and observed != expected:
@@ -149,7 +148,7 @@ def inspect_art(image: Image.Image, vision: VisionClient, references=(), context
                         continue  # a hidden identifying detail is not an observed redesign
                     if not check["matches"] or observed == "not_visible":
                         mismatch = True
-                    if requirement["attribute"] in ("pose", "state") and expected in literal_states and observed != expected:
+                    if requirement["attribute"] in ("pose", "state") and expected in LITERAL_STATES and observed != expected:
                         mismatch = True  # explicit state contradictions cannot be waved through by matches=true
                 found["requirement_mismatch"] = mismatch
                 found["requirement_checks"] = [ordered[i] for i in range(len(requirements))]
@@ -221,8 +220,8 @@ def draw_checked(
     on_select(draw), when given, is told which 1-based draw was kept.
     """
     redraw, negative, rejected, redraw_parts = "", None, [], []
-    # A limb-only framing row is observed only, never enforced: it stays out of the check, the revision and the
-    # redraw (the panel prompt still asks for the crop; the report keeps the full list for the audit).
+    # A limb-only framing row is observed only, never enforced: it stays out of the check, the audit, the revision and
+    # the redraw, so every consumer shares one index space (the panel prompt still asks for the crop).
     checked = [r for r in requirements if r.get("attribute") != "framing"]
     for draw in range(1, MAX_DRAWS + 1):
         # Draw 2 revises the rejected draw 1 (book_comic.revise); draw 3 re-rolls from scratch with the corrections.
@@ -251,19 +250,19 @@ def draw_checked(
             found = {**found, "scene_mismatch": True, "margins_redraw": True, "corrections": [*(found.get("corrections") or []), MARGIN_CORRECTION]}
         if unasked_gloves(found, prompt):
             found = {**found, "gloves": True}
-        report = {"accepted": None, "requirements": requirements, "checks": found, **({"revised": True} if revised else {}), **({"seam_cut": True} if seam_cut else {})}
+        report = {"accepted": None, "requirements": checked, "checks": found, **({"revised": True} if revised else {}), **({"seam_cut": True} if seam_cut else {})}
         if audit is not None:
             audit.append(report)
         try:
             clean = require_checked(found)
         except ArtCheckError:
-            report_rejected(on_reject, draw, art, found, True, prompt, requirements)
+            report_rejected(on_reject, draw, art, found, True, prompt, checked)
             raise
         report["accepted"] = clean
         if clean:
             art.info["comic_verification"] = found
             return art
-        report_rejected(on_reject, draw, art, found, False, prompt, requirements)
+        report_rejected(on_reject, draw, art, found, False, prompt, checked)
         rejected.append((art, found, report))
         # The fresh draw 3 is told about every rejected draw's defects (a revision can fix one and lose another).
         part = ((NO_TEXT_RULE if found["has_text"] else "") + (f" {ANATOMY_RULE}" if found["bad_anatomy"] else "")).strip()
