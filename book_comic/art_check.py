@@ -11,7 +11,7 @@ from book_comic.best_draw import fallback_verification, pick_fallback, unasked_g
 from book_comic.comic_rules import ANATOMY_RULE, NO_TEXT_RULE, SEAM_CORRECTION, SINGLE_IMAGE_RULE, prop_shape
 from book_comic.lettering_space import CHECK_NOTE, useful_corrections
 from book_comic.margins import MARGIN_CORRECTION, target_aspect, trim_margins
-from book_comic.rejected_art import LITERAL_STATES, report as report_rejected, report_selected
+from book_comic.rejected_art import report as report_rejected, report_selected, requirement_failed
 from book_comic.revise import data_url, failed_requirements, revision_prompt
 from book_comic.seam import cut_seam
 from generation.openrouter_image_client import OpenRouterImageClient
@@ -136,21 +136,9 @@ def inspect_art(image: Image.Image, vision: VisionClient, references=(), context
         if isinstance(checks, list) and len(checks) == len(requirements):
             ordered = {c.get("index"): c for c in checks if isinstance(c, dict) and type(c.get("index")) is int}
             if set(ordered) == set(range(len(requirements))) and all(_valid_evidence(c) for c in ordered.values()):
-                mismatch = False
-                for i, requirement in enumerate(requirements):
-                    check = ordered[i]
-                    expected, observed = requirement["expected"].strip().lower(), check["observed"].strip().lower()
-                    if requirement["attribute"] == "framing":
-                        continue  # observed only: no image model holds a limb-only crop, and a reader keeps the fuller draw
-                    if requirement["attribute"] == "hand" and observed != expected:
-                        mismatch = True
-                    if observed == "not_visible" and requirement["attribute"] == "design":
-                        continue  # a hidden identifying detail is not an observed redesign
-                    if not check["matches"] or observed == "not_visible":
-                        mismatch = True
-                    if requirement["attribute"] in ("pose", "state") and expected in LITERAL_STATES and observed != expected:
-                        mismatch = True  # explicit state contradictions cannot be waved through by matches=true
-                found["requirement_mismatch"] = mismatch
+                # One rule for an unmet row (rejected_art.requirement_failed): the checker's verdict, a hidden state, or a
+                # vocabulary contradiction waved through with matches=true; a framing row and a hidden design never fail.
+                found["requirement_mismatch"] = any(requirement_failed(ordered[i], requirement) for i, requirement in enumerate(requirements))
                 found["requirement_checks"] = [ordered[i] for i in range(len(requirements))]
     if props:
         checks = answer.get("prop_checks")
@@ -282,7 +270,7 @@ def draw_checked(
         if part and part not in redraw_parts:
             redraw_parts.append(part)
         redraw = " ".join(redraw_parts)
-    best = pick_fallback([(a, f) for a, f, _ in rejected]) if fallback else None
+    best = pick_fallback([(a, f) for a, f, _ in rejected], checked) if fallback else None
     if best is None:
         raise ArtCheckError("comic_art_rejected")
     art, found, report = rejected[best]

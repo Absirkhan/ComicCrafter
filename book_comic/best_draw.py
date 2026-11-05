@@ -12,7 +12,7 @@ checks, then the latest draw (a redraw carries the check's corrections).
 import re
 from typing import Dict, List, Optional, Sequence, Tuple
 
-from book_comic.rejected_art import CHECK_NAMES
+from book_comic.rejected_art import CHECK_NAMES, unmet_requirements
 
 # figure_visible: a back cover must show only the setting; a person there has no face check, so it is never kept.
 HARD_DEFECTS = ("bad_anatomy", "identity_mismatch", "figure_visible")
@@ -37,16 +37,15 @@ def hard_defect(found: Dict) -> bool:
     return text or seam or bool(found.get("gloves")) or any(found.get(k) for k in HARD_DEFECTS)
 
 
-def _rank(found: Dict) -> Tuple[int, int]:
+def _rank(found: Dict, requirements: Sequence[Dict]) -> Tuple[int, int]:
     flags = sum(1 for k in CHECK_NAMES if found.get(k))
-    requirements = sum(1 for c in found.get("requirement_checks", []) if isinstance(c, dict) and c.get("matches") is not True)
-    return flags, requirements
+    return flags, len(unmet_requirements(found, requirements))  # the same unmet-row rule as the check and the reasons
 
 
-def pick_fallback(rejected: Sequence[Tuple[object, Dict]]) -> Optional[int]:
+def pick_fallback(rejected: Sequence[Tuple[object, Dict]], requirements: Sequence[Dict] = ()) -> Optional[int]:
     """Index of the least-bad rejected draw without a hard defect, or None when every draw has one."""
     eligible: List[Tuple[Tuple[int, int], int]] = [
-        (_rank(found), i) for i, (_, found) in enumerate(rejected) if not hard_defect(found)
+        (_rank(found, requirements), i) for i, (_, found) in enumerate(rejected) if not hard_defect(found)
     ]
     # A tie goes to the later draw: each redraw carries the check's corrections, so it is usually closer to the brief
     # (ed88ca80 panel 1 kept draw 1, the closest crop, over draw 2, the better establishing shot).

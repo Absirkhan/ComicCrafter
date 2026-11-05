@@ -135,7 +135,7 @@ def render_cover(
         report_rejected(on_reject, draw, art, found, False, prompt, requirements)
         rejected.append((art, found, report))
     else:
-        best = pick_fallback([(a, f) for a, f, _ in rejected])
+        best = pick_fallback([(a, f) for a, f, _ in rejected], requirements)
         if best is None:
             raise ArtCheckError("comic_cover_rejected")
         art, found, report = rejected[best]
