@@ -155,8 +155,9 @@ class PageRenderer:
             prompt = sheet_prompt(self.cast, self.cast["characters"][0], ["photo"] if references else [])
             try:
                 if self.options.check_art:
+                    # strict_text: glyphs baked into the sheet would be copied into every panel, so even faint ones redraw.
                     sheet = draw_checked(self.images, self.vision, prompt, references, "2:3", audit=self.audit,
-                                         on_reject=self.rejected.hook("sheet"))
+                                         on_reject=self.rejected.hook("sheet"), strict_text=True)
                 else:
                     sheet = request_art(self.images, prompt, references, "2:3")
                 sheet.save(path)

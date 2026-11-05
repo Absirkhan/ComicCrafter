@@ -16,6 +16,7 @@ from typing import Dict, Optional, Sequence
 from PIL import Image
 
 from book_comic.lettering_space import useful_corrections
+from book_comic.rejected_art import unmet_requirements
 
 REVISE_MARK = "REVISE the last attached image"
 REFERENCE_PX = 1536  # the editing model needs the picture, not print resolution: a JPEG this size, not a multi-MB PNG
@@ -33,7 +34,7 @@ _CHARACTER_FIXES = ("identity_mismatch", "design_mismatch")
 
 def data_url(image: Image.Image) -> str:
     """A JPEG data URL of the draw at reference size, as the image client takes references."""
-    small = image.convert("RGB").copy()
+    small = image.convert("RGB")
     small.thumbnail((REFERENCE_PX, REFERENCE_PX))
     buffer = BytesIO()
     small.save(buffer, format="JPEG", quality=92)
@@ -41,15 +42,8 @@ def data_url(image: Image.Image) -> str:
 
 
 def failed_requirements(found: Dict, requirements: Sequence[Dict] = ()) -> list:
-    """The requirement rows the check saw unmet, without framing rows (observed only, never enforced)."""
-    out = []
-    for i, c in enumerate(c for c in found.get("requirement_checks") or [] if isinstance(c, dict)):
-        index = c.get("index") if type(c.get("index")) is int else i  # the model's own index when the list is raw
-        requirement = requirements[index] if 0 <= index < len(requirements) else None
-        if requirement is None or c.get("matches") is True or c.get("soft") or requirement.get("attribute") == "framing":
-            continue
-        out.append({"required": requirement, "observed": str(c.get("observed", ""))[:120]})
-    return out
+    """The requirement rows the check saw unmet (rejected_art.unmet_requirements: one definition for reasons, revision and redraw)."""
+    return [{"required": requirement, "observed": str(check.get("observed", ""))[:120]} for check, requirement in unmet_requirements(found, requirements)]
 
 
 def _wrong_props(found: Dict, anchors: Optional[Dict]) -> list:
