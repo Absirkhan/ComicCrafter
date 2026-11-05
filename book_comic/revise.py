@@ -11,13 +11,14 @@ revision did not fix it (a fresh base instead of editing a bad one).
 import base64
 import json
 from io import BytesIO
-from typing import Dict, Sequence
+from typing import Dict, Optional, Sequence
 
 from PIL import Image
 
 from book_comic.lettering_space import useful_corrections
 
 REVISE_MARK = "REVISE the last attached image"
+REFERENCE_PX = 1536  # the editing model needs the picture, not print resolution: a JPEG this size, not a multi-MB PNG
 # What to ask for, per failed check, said positively (describe the wanted result, not the defect).
 _FIXES = {
     "has_text": "every surface becomes plain: no letters, words, numbers or glyphs anywhere, no bubbles or caption boxes",
@@ -26,37 +27,55 @@ _FIXES = {
     "seam": "one continuous picture: the dividing line is gone and the scene runs unbroken across it",
     "identity_mismatch": "the face, age, hair and proportions match the reference photo and character sheet",
     "design_mismatch": "the outfit and prop construction match the character sheet exactly",
-    "figure_visible": "nobody is in the picture: the setting alone, every person removed",
 }
+_CHARACTER_FIXES = ("identity_mismatch", "design_mismatch")
 
 
 def data_url(image: Image.Image) -> str:
-    """A PNG data URL of the draw, as the image client takes references."""
+    """A JPEG data URL of the draw at reference size, as the image client takes references."""
+    small = image.convert("RGB").copy()
+    small.thumbnail((REFERENCE_PX, REFERENCE_PX))
     buffer = BytesIO()
-    image.convert("RGB").save(buffer, format="PNG")
-    return "data:image/png;base64," + base64.b64encode(buffer.getvalue()).decode()
+    small.save(buffer, format="JPEG", quality=92)
+    return "data:image/jpeg;base64," + base64.b64encode(buffer.getvalue()).decode()
 
 
-def revision_prompt(brief: str, found: Dict, extra: Sequence[str] = ()) -> str:
+def failed_requirements(found: Dict, requirements: Sequence[Dict] = ()) -> list:
+    """The requirement rows the check saw unmet, without framing rows (observed only, never enforced)."""
+    rows = [c for c in found.get("requirement_checks") or [] if isinstance(c, dict)]
+    return [{"required": requirements[i] if i < len(requirements) else None, "observed": str(c.get("observed", ""))[:120]}
+            for i, c in enumerate(rows)
+            if c.get("matches") is not True and not (i < len(requirements) and requirements[i].get("attribute") == "framing")]
+
+
+def _wrong_props(found: Dict, anchors: Optional[Dict]) -> list:
+    return [{"prop": c.get("name"), "observed": str(c.get("observed", ""))[:120], "canonical": (anchors or {}).get(c.get("name"))}
+            for c in found.get("prop_checks") or [] if isinstance(c, dict) and c.get("visible") and c.get("matches") is not True][:4]
+
+
+def revision_prompt(brief: str, found: Dict, extra: Sequence[str] = (), requirements: Sequence[Dict] = (), anchors: Optional[Dict] = None) -> str:
     """The edit instruction for draw 2: keep the rejected draw, change only what the check found.
 
     brief: the original generation prompt (its rules still apply; the scene is already staged)
     found: the check's answer for the rejected draw
-    extra: further short requests (the framing block, a required state), already positive
+    extra: further short requests (the framing block), already positive
+    requirements / anchors: the brief's required states and canonical prop designs, for the evidence of what was wrong
     """
     wanted = [text for key, text in _FIXES.items() if found.get(key)]
-    failed = [c for c in found.get("requirement_checks") or [] if isinstance(c, dict) and c.get("matches") is not True]
-    if failed or found.get("prop_mismatch") or found.get("prop_shape_mismatch"):
-        wanted.append("the required states and prop designs are exactly as the brief lists them: " + json.dumps(failed)[:400])
+    failed, props = failed_requirements(found, requirements)[:6], _wrong_props(found, anchors)
+    if failed or props or found.get("prop_shape_mismatch"):
+        wanted.append("the required states and prop designs are exactly as listed: " + json.dumps({"states": failed, "props": props}, ensure_ascii=False))
     wanted += [w for w in extra if w]
     corrections = useful_corrections(found.get("corrections"))
     if corrections:
         wanted.append("apply these reviewer corrections: " + "; ".join(corrections))
     if not wanted:
         wanted.append("the picture matches the brief's planned shot, action and expression")
+    character = any(found.get(k) for k in _CHARACTER_FIXES)
+    keep = "composition, camera, setting, colours and art style" + ("" if character else ", and the character") + (
+        ", redrawing only the character's face, hair, proportions or outfit as the references show" if character else "")
     return (
-        f"{REVISE_MARK}, which is your previous attempt at this picture. Keep its composition, camera, character, "
-        "setting, colours and art style exactly as they are. Change only the following, and do not change any other "
-        "element of the image: " + "; ".join(wanted) + ". "
+        f"{REVISE_MARK}, which is your previous attempt at this picture. Keep its {keep} exactly as they are. "
+        "Change only the following, and do not change any other element of the image: " + "; ".join(wanted) + ". "
         "The original brief follows for its rules only; the scene is already staged in the attached attempt. " + brief
     )

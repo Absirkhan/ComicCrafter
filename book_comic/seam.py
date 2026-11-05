@@ -1,45 +1,25 @@
 """A seam: a thin flat full-width line where the image model stacked a second strip over the scene.
 
 find_seam keeps the cover's contract (a strip across the top; the row below it). cut_seam, for panels, also takes
-a strip across the bottom, and leaves a seam in the middle alone: the part left after cropping must keep at least
-KEEP of the height, or the cut would crop the panel to a sliver when it is fitted back to its size (a mid-height
-seam is for the revision or a fresh draw, book_comic.revise).
+a strip across the bottom, and leaves a seam in the middle alone: a stacked strip is a band of at most STRIP of the
+height; cutting more would crop the panel to a sliver when it is fitted back to its size, and a flat line deeper in
+the picture is more likely a floor or table edge (a mid-height seam is for the revision or a fresh draw,
+book_comic.revise). The audit marks a cut draw ("seam_cut").
 """
-from typing import Optional, Tuple
+from typing import List, Optional, Tuple
 
 from PIL import Image, ImageOps
 
-KEEP = 0.7
+STRIP = 0.25
+THIN = 0.02  # a seam is at most this share of the height; thicker flat bands are sky, floor or a wall
 
 
-def find_seam(image: Image.Image, search_share: float = 0.45) -> Optional[int]:
-    """The row just below a thin, flat, full-width line across the top of the art where the model
-    stacked a second strip; None when there is none. Only a run of at most 2% of the height with
-    textured art on both sides counts, so a plain sky is not a seam."""
+def _runs(image: Image.Image) -> Tuple[List[Tuple[int, int]], int]:
+    """(start, end) of every thin flat full-width run with textured art on both sides, and the height."""
     import numpy as np
     flat = np.asarray(image.convert("RGB"), dtype=np.float32).std(axis=1).max(axis=1) < 20
     h = len(flat)
-    thin, gap = max(3, int(h * 0.02)), max(2, h // 300)
-    y = gap
-    while y < int(h * search_share):
-        if not flat[y]:
-            y += 1
-            continue
-        run_end = y
-        while run_end < h and flat[run_end]:
-            run_end += 1
-        if run_end - y <= thin and run_end + gap < h and not flat[y - gap] and not flat[run_end + gap]:
-            return run_end
-        y = run_end + 1
-    return None
-
-
-def _runs(image: Image.Image):
-    """(start, end) of every thin flat full-width run with textured art on both sides."""
-    import numpy as np
-    flat = np.asarray(image.convert("RGB"), dtype=np.float32).std(axis=1).max(axis=1) < 20
-    h = len(flat)
-    thin, gap = max(3, int(h * 0.03)), max(2, h // 300)
+    thin, gap = max(3, int(h * THIN)), max(2, h // 300)
     y, runs = gap, []
     while y < h - gap:
         if not flat[y]:
@@ -54,13 +34,18 @@ def _runs(image: Image.Image):
     return runs, h
 
 
-def seam_band(image: Image.Image) -> Optional[Tuple[int, int]]:
-    """The (start, end) rows of a seam whose smaller side can be cut off while KEEP of the height remains; else None."""
+def find_seam(image: Image.Image, search_share: float = 0.45) -> Optional[int]:
+    """The row just below a thin, flat, full-width line across the top of the art where the model stacked a second
+    strip; None when there is none. Only a run of at most THIN of the height with textured art on both sides counts,
+    so a plain sky is not a seam."""
     runs, h = _runs(image)
-    for start, end in runs:
-        if end <= h * (1 - KEEP) or start >= h * KEEP:
-            return start, end
-    return None
+    return next((end for start, end in runs if start < int(h * search_share)), None)
+
+
+def seam_band(image: Image.Image) -> Optional[Tuple[int, int]]:
+    """The (start, end) rows of a seam within STRIP of the top or the bottom edge, else None."""
+    runs, h = _runs(image)
+    return next(((start, end) for start, end in runs if end <= h * STRIP or start >= h * (1 - STRIP)), None)
 
 
 def cut_seam(art: Image.Image, size: Tuple[int, int]) -> Optional[Image.Image]:
@@ -69,6 +54,6 @@ def cut_seam(art: Image.Image, size: Tuple[int, int]) -> Optional[Image.Image]:
     if band is None:
         return None
     start, end = band
-    if end <= art.height * (1 - KEEP):
+    if end <= art.height * STRIP:
         return ImageOps.fit(art.crop((0, end, art.width, art.height)), size, Image.Resampling.LANCZOS, centering=(0.5, 0.0))
     return ImageOps.fit(art.crop((0, 0, art.width, start)), size, Image.Resampling.LANCZOS, centering=(0.5, 1.0))

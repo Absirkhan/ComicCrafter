@@ -151,9 +151,9 @@ def sheet_prompt(cast: Dict, character: Dict, roles: Sequence[str] = ()) -> str:
     )
 
 
-def _cover_requirements(cover: Dict):
+def cover_requirements(scene: str, requirements=()):
     """The cover's checked states without camera framing: the cover prompt sets its own (comic_rules.cover_scene)."""
-    return [r for r in scene_requirements(cover.get('scene', ''), cover.get('requirements', [])) if r.get('attribute') != 'framing']
+    return [r for r in scene_requirements(scene, requirements) if r.get('attribute') != 'framing']
 
 
 def cover_prompt(cast: Dict, cover: Dict, roles: Sequence[str] = ()) -> str:
@@ -180,7 +180,7 @@ def cover_prompt(cast: Dict, cover: Dict, roles: Sequence[str] = ()) -> str:
         "in the frame without forcing a standing pose: follow the scene's action. Aim for the head about one third "
         "of the way down the canvas when that pose permits, with more of the setting "
         "(its sky, ceiling or upper wall) above it, and let the bottom edge fade slightly darker. "
-        f"{acceptance_prompt(_cover_requirements(cover), cast.get('prop_anchors'))}{props_rule(cast)}{ANATOMY_RULE}{NO_TEXT_RULE}"
+        f"{acceptance_prompt(cover_requirements(cover.get('scene', ''), cover.get('requirements', [])), cast.get('prop_anchors'))}{props_rule(cast)}{ANATOMY_RULE}{NO_TEXT_RULE}"
     )
 
 

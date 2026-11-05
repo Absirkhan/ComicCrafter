@@ -15,7 +15,7 @@ from PIL import Image, ImageEnhance, ImageFilter, ImageOps
 from book_comic.art_check import ArtCheckError, inspect_art, request_art, require_checked
 from book_comic.back_cover_lettering import letter_back_cover
 from book_comic.best_draw import pick_fallback
-from book_comic.cover import find_seam
+from book_comic.seam import find_seam
 from book_comic.cover_lettering import CoverFonts
 from book_comic.image_prompts import back_cover_prompt
 from book_comic.margins import trim_margins

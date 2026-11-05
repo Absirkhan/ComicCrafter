@@ -12,7 +12,7 @@ from book_comic.comic_rules import ANATOMY_RULE, NO_TEXT_RULE, SEAM_CORRECTION, 
 from book_comic.lettering_space import CHECK_NOTE, useful_corrections
 from book_comic.margins import MARGIN_CORRECTION, target_aspect, trim_margins
 from book_comic.rejected_art import report as report_rejected, report_selected
-from book_comic.revise import data_url, revision_prompt
+from book_comic.revise import data_url, failed_requirements, revision_prompt
 from book_comic.seam import cut_seam
 from generation.openrouter_image_client import OpenRouterImageClient
 from generation.vision_client import VisionClient
@@ -152,7 +152,8 @@ def inspect_art(image: Image.Image, vision: VisionClient, references=(), context
                     if requirement["attribute"] in ("pose", "state") and expected in literal_states and observed != expected:
                         mismatch = True  # explicit state contradictions cannot be waved through by matches=true
                 found["requirement_mismatch"] = mismatch
-                found["requirement_checks"] = [ordered[i] for i in range(len(requirements))]
+                # A framing row is observed only (see above): marked soft so prompts and audits never treat it as unmet.
+                found["requirement_checks"] = [{**ordered[i], **({"soft": True} if requirements[i]["attribute"] == "framing" else {})} for i in range(len(requirements))]
     if props:
         checks = answer.get("prop_checks")
         if isinstance(checks, list) and len(checks) == len(props):
@@ -167,6 +168,10 @@ def inspect_art(image: Image.Image, vision: VisionClient, references=(), context
     people, hands = answer.get("people"), answer.get("hands_visible")
     if all(isinstance(n, (int, float)) and not isinstance(n, bool) and math.isfinite(n) for n in (people, hands)) and people > 0 and hands > 2 * people:
         found["bad_anatomy"] = True
+    if found.get("has_text") and found.get("text_prominent") is False:
+        # Tiny, illegible pseudo-lettering (a distant sign's glyphs) is not what a reader notices: kept, never redrawn,
+        # on panels, covers and sheets alike; prominent or unrated writing stays has_text (book_comic.best_draw).
+        found = {**found, "has_text": False, "faint_text": True}
     return found
 
 
@@ -221,7 +226,7 @@ def draw_checked(
         if revised:
             previous_art, previous_found, _ = rejected[-1]
             extra = ["Repeat of the required framing: " + " ".join(framing.split()) if framing and (previous_found.get("scene_mismatch") or previous_found.get("requirement_mismatch")) else ""]
-            art = request_art(images, revision_prompt(prompt, previous_found, extra), [*references, data_url(previous_art)], aspect_ratio, negative)
+            art = request_art(images, revision_prompt(prompt, previous_found, extra, requirements, anchors), [*references, data_url(previous_art)], aspect_ratio, negative)
         else:
             art = request_art(images, f"{prompt} {redraw}".rstrip() if redraw else prompt, references, aspect_ratio, negative)
         # Paper margins (a print drawn on paper) are cut off before the check when the picture still fills the
@@ -232,17 +237,15 @@ def draw_checked(
             art = trimmed
         if size is not None:
             art = ImageOps.fit(art, size, Image.Resampling.LANCZOS)
-        if size is not None and (cut := cut_seam(art, size)) is not None:
+        seam_cut = size is not None and (cut := cut_seam(art, size)) is not None
+        if seam_cut:
             art = cut  # a strip stacked over or under the scene is cut off locally instead of spending a redraw
         found = inspect_art(art, vision, references=references, context=prompt, requirements=requirements, props=props, anchors=anchors)
-        if found.get("has_text") and found.get("text_prominent") is False:
-            # Tiny, illegible pseudo-lettering (a distant sign's glyphs) is not what a reader notices: kept, never redrawn.
-            found = {**found, "has_text": False, "faint_text": True}
         if margins == "redraw":
             found = {**found, "scene_mismatch": True, "corrections": [*(found.get("corrections") or []), MARGIN_CORRECTION]}
         if unasked_gloves(found, prompt):
             found = {**found, "gloves": True}
-        report = {"accepted": None, "requirements": requirements, "checks": found, **({"revised": True} if revised else {})}
+        report = {"accepted": None, "requirements": requirements, "checks": found, **({"revised": True} if revised else {}), **({"seam_cut": True} if seam_cut else {})}
         if audit is not None:
             audit.append(report)
         try:
@@ -259,7 +262,7 @@ def draw_checked(
         redraw = ((NO_TEXT_RULE if found["has_text"] else "") + (f" {ANATOMY_RULE}" if found["bad_anatomy"] else "")).strip()
         if any(found.get(k) for k in ("identity_mismatch", "design_mismatch", "scene_mismatch")):
             redraw += " Match the established reference identity, proportions, style, outfit and object construction. Follow the exact planned shot and action."
-        failed = [r for r in found.get("requirement_checks", []) if not r["matches"]]
+        failed = failed_requirements(found, requirements)
         if framing and (found.get("scene_mismatch") or found.get("requirement_mismatch")):
             redraw += " Repeat of the required framing: " + " ".join(framing.split())
         if found.get("requirement_mismatch") or found.get("prop_mismatch") or found.get("prop_shape_mismatch"):

@@ -4,7 +4,8 @@ import pytest
 from PIL import Image, ImageFont
 
 from book_comic import cover as cover_module
-from book_comic.cover import find_seam, panel_strip, render_cover
+from book_comic.cover import panel_strip, render_cover
+from book_comic.seam import find_seam
 from book_comic.cover_lettering import FONTS_DIR, TITLE_FONT, letter_cover, one_line_font, resolve_font
 from conftest import FakeImages, FakeVision
 
@@ -170,4 +171,4 @@ def test_a_rejected_cover_is_revised_on_the_second_draw(tmp_path):
     render_cover(CAST, COVER, (400, 600), tmp_path / 'cover.png', images, FakeVision(lambda p, i: next(answers)), references=['data:photo'], reference_roles=['photo'])
     assert len(images.calls) == 2
     assert images.calls[1]['prompt'].startswith(REVISE_MARK) and 'Match the teal blazer' in images.calls[1]['prompt']
-    assert images.calls[1]['references'][0] == 'data:photo' and images.calls[1]['references'][-1].startswith('data:image/png;base64,')
+    assert images.calls[1]['references'][0] == 'data:photo' and images.calls[1]['references'][-1].startswith('data:image/jpeg;base64,')
