@@ -226,3 +226,38 @@ def test_gloves_on_every_draw_fail_the_panel():
     gloves = {"design_mismatch": True, "corrections": ["Remove the fingerless gloves."]}
     with pytest.raises(ArtCheckError):
         draw_checked(images, judge({c: gloves for c in (RED, GREEN, BLUE)}), BARE_BRIEF, [], "2:3", fallback=True)
+
+
+def test_the_second_draw_revises_the_first_and_the_third_rerolls():
+    """Draw 2 edits the rejected draw 1 (sent as the last reference, with only the corrections); draw 3 starts fresh."""
+    from book_comic.revise import REVISE_MARK
+    images = FakeImages(colours("red", "green", "blue"))
+    vision = judge({RED: {"design_mismatch": True, "corrections": ["Remove the gloves"]}, GREEN: {"scene_mismatch": True}})
+    art = draw_checked(images, vision, "scene brief", ["data:photo", "data:sheet"], "2:3", fallback=True)
+    assert art.getpixel((0, 0)) == BLUE and len(images.calls) == 3
+    first, second, third = images.calls
+    assert first["references"] == ["data:photo", "data:sheet"] and REVISE_MARK not in first["prompt"]
+    assert second["prompt"].startswith(REVISE_MARK) and "Remove the gloves" in second["prompt"] and "scene brief" in second["prompt"]
+    assert second["references"][:2] == ["data:photo", "data:sheet"] and second["references"][2].startswith("data:image/png;base64,")
+    assert third["references"] == ["data:photo", "data:sheet"] and REVISE_MARK not in third["prompt"]
+
+
+def test_a_revision_that_fixes_the_draw_is_accepted_and_marked():
+    images = FakeImages(colours("red", "green"))
+    audit = []
+    art = draw_checked(images, judge({RED: {"has_text": True, "text_prominent": True}}), "scene", [], "2:3", audit=audit)
+    assert art.getpixel((0, 0)) == GREEN and len(images.calls) == 2
+    assert audit[0].get("revised") is None and audit[1]["revised"] is True and audit[1]["accepted"] is True
+    assert "no letters, words, numbers or glyphs anywhere" in images.calls[1]["prompt"]
+
+
+def test_a_bottom_strip_is_cut_off_but_a_mid_height_seam_is_left_to_the_revision(noise):
+    from book_comic.seam import cut_seam, seam_band
+    bottom = noise((400, 600))
+    bottom.paste((170, 172, 172), (0, 500, 400, 505))
+    assert seam_band(bottom) == (500, 505)
+    kept = cut_seam(bottom, (400, 600))
+    assert kept is not None and kept.size == (400, 600) and seam_band(kept) is None
+    middle = noise((400, 600))
+    middle.paste((170, 172, 172), (0, 300, 400, 305))
+    assert seam_band(middle) is None and cut_seam(middle, (400, 600)) is None

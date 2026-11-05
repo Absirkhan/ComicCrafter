@@ -86,12 +86,14 @@ def test_lettering_clearance_advice_is_dropped_from_the_redraw_but_real_correcti
     assert "pseudo-lettering from the poster" in redraw and "below the upper third" not in redraw
 
 
-def test_a_seam_the_checker_reports_repeats_the_single_image_rule_on_redraw():
+def test_a_seam_the_checker_reports_is_revised_into_one_continuous_picture():
     images = FakeImages([Image.new("RGB", (64, 64), c) for c in ("red", "blue")])
     vision = FakeVision(lambda p, i: {**CLEAN, "has_text": i.getpixel((0, 0)) == (255, 0, 0),
                                       "corrections": ["Remove the horizontal panel divider line"] if i.getpixel((0, 0)) == (255, 0, 0) else []})
     art = draw_checked(images, vision, "Wide shot: Hero waits.", [], "2:1")
-    assert SINGLE_IMAGE_RULE in images.calls[1]["prompt"] and SINGLE_IMAGE_RULE not in images.calls[0]["prompt"]
+    revision = images.calls[1]["prompt"]
+    assert revision.startswith("REVISE the last attached image") and "the dividing line is gone" in revision
+    assert "Remove the horizontal panel divider line" in revision and SINGLE_IMAGE_RULE not in images.calls[0]["prompt"]
     assert art.info["comic_verification"]["seam"] is False  # bookkeeping, never a rejection flag
     assert "never stack two pictures, bands or strips" in SINGLE_IMAGE_RULE
     assert prompt_for("Wide shot: Hero waits.").count(SINGLE_IMAGE_RULE) == 2  # opening block and closing line

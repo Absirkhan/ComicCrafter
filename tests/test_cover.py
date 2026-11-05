@@ -160,3 +160,14 @@ def test_cover_scene_keeps_a_scene_without_a_shot():
     from book_comic.comic_rules import cover_scene
     assert cover_scene('Wide shot: A street at night.') == 'A street at night.'
     assert cover_scene('A street at night, a wide shot of it.') == 'A street at night, a wide shot of it.'
+
+
+def test_a_rejected_cover_is_revised_on_the_second_draw(tmp_path):
+    from book_comic.revise import REVISE_MARK
+    answers = iter([{'head_top': 400, 'has_text': False, 'bad_anatomy': False, 'identity_mismatch': False, 'design_mismatch': True, 'scene_mismatch': False, 'corrections': ['Match the teal blazer']},
+                    {'head_top': 400, 'has_text': False, 'bad_anatomy': False, 'identity_mismatch': False, 'design_mismatch': False, 'scene_mismatch': False}])
+    images = FakeImages([Image.new('RGB', (400, 600), 'blue'), Image.new('RGB', (400, 600), 'green')])
+    render_cover(CAST, COVER, (400, 600), tmp_path / 'cover.png', images, FakeVision(lambda p, i: next(answers)), references=['data:photo'], reference_roles=['photo'])
+    assert len(images.calls) == 2
+    assert images.calls[1]['prompt'].startswith(REVISE_MARK) and 'Match the teal blazer' in images.calls[1]['prompt']
+    assert images.calls[1]['references'][0] == 'data:photo' and images.calls[1]['references'][-1].startswith('data:image/png;base64,')
