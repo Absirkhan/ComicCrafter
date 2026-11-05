@@ -249,3 +249,15 @@ def test_a_revision_that_fixes_the_draw_is_accepted_and_marked():
     assert art.getpixel((0, 0)) == GREEN and len(images.calls) == 2
     assert audit[0].get("revised") is None and audit[1]["revised"] is True and audit[1]["accepted"] is True
     assert "no letters, words, numbers or glyphs anywhere" in images.calls[1]["prompt"]
+
+
+def test_a_bottom_strip_is_cut_off_but_a_mid_height_seam_is_left_to_the_revision(noise):
+    from book_comic.seam import cut_seam, seam_band
+    bottom = noise((400, 600))
+    bottom.paste((170, 172, 172), (0, 500, 400, 505))
+    assert seam_band(bottom) == (500, 505)
+    kept = cut_seam(bottom, (400, 600))
+    assert kept is not None and kept.size == (400, 600) and seam_band(kept) is None
+    middle = noise((400, 600))
+    middle.paste((170, 172, 172), (0, 300, 400, 305))
+    assert seam_band(middle) is None and cut_seam(middle, (400, 600)) is None

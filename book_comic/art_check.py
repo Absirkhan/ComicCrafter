@@ -13,7 +13,7 @@ from book_comic.lettering_space import CHECK_NOTE, useful_corrections
 from book_comic.margins import MARGIN_CORRECTION, target_aspect, trim_margins
 from book_comic.rejected_art import report as report_rejected, report_selected
 from book_comic.revise import data_url, revision_prompt
-from book_comic.seam import find_seam
+from book_comic.seam import cut_seam
 from generation.openrouter_image_client import OpenRouterImageClient
 from generation.vision_client import VisionClient
 
@@ -232,9 +232,8 @@ def draw_checked(
             art = trimmed
         if size is not None:
             art = ImageOps.fit(art, size, Image.Resampling.LANCZOS)
-        if size is not None and (seam := find_seam(art)) is not None:
-            # A stacked strip over the scene is cut off locally, as on the cover, instead of spending a redraw.
-            art = ImageOps.fit(art.crop((0, seam, art.width, art.height)), size, Image.Resampling.LANCZOS, centering=(0.5, 0.0))
+        if size is not None and (cut := cut_seam(art, size)) is not None:
+            art = cut  # a strip stacked over or under the scene is cut off locally instead of spending a redraw
         found = inspect_art(art, vision, references=references, context=prompt, requirements=requirements, props=props, anchors=anchors)
         if found.get("has_text") and found.get("text_prominent") is False:
             # Tiny, illegible pseudo-lettering (a distant sign's glyphs) is not what a reader notices: kept, never redrawn.
