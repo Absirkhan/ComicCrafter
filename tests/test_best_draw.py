@@ -251,17 +251,15 @@ def test_a_revision_that_fixes_the_draw_is_accepted_and_marked():
     assert "no letters, words, numbers or glyphs anywhere" in images.calls[1]["prompt"]
 
 
-def test_a_bottom_strip_is_cut_off_but_a_mid_height_seam_is_left_to_the_revision(noise):
+def test_only_a_strip_across_the_top_is_cut_off(noise):
+    """A flat line lower down looks like a floor or table edge to a pixel scan (review 2026-11-05): left to the check."""
     from book_comic.seam import cut_seam, seam_band
     bottom = noise((400, 600))
     bottom.paste((170, 172, 172), (0, 500, 400, 505))
-    assert seam_band(bottom) == (500, 505)
-    kept = cut_seam(bottom, (400, 600))
-    assert kept is not None and kept.size == (400, 600) and seam_band(kept) is None
-    middle = noise((400, 600))
-    middle.paste((170, 172, 172), (0, 300, 400, 305))
-    assert seam_band(middle) is None and cut_seam(middle, (400, 600)) is None
-
+    assert seam_band(bottom) is None and cut_seam(bottom, (400, 600)) is None
+    top = noise((400, 600))
+    top.paste((170, 172, 172), (0, 60, 400, 65))
+    assert seam_band(top) == (60, 65) and cut_seam(top, (400, 600)).size == (400, 600)
 
 def test_the_revision_carries_prop_evidence_and_never_a_framing_row():
     """Review 2026-11-05: a limb-only framing row is observed only and must not steer the revision; a wrong prop needs evidence."""
@@ -277,19 +275,25 @@ def test_the_revision_carries_prop_evidence_and_never_a_framing_row():
     prompt = revision_prompt("brief", found, (), requirements, {"the lantern": "turquoise disk"})
     assert "hand_detail_only" not in prompt.split("The original brief")[0]
     assert '"observed": "open"' in prompt and '"prop": "the lantern"' in prompt and '"canonical": "turquoise disk"' in prompt
-    assert "redrawing only the character's face, hair, proportions or outfit" in prompt and ", and the character" not in prompt
+    assert "redraw the character's face, hair, proportions and outfit" in prompt and "character exactly" not in prompt
 
 
-def test_a_revision_without_a_character_defect_keeps_the_character():
+def test_a_revision_keeps_only_what_was_not_the_defect():
     from book_comic.revise import revision_prompt
-    prompt = revision_prompt("brief", {**BASE, "scene_mismatch": True, "corrections": ["Turn Hero toward the city"]})
-    assert ", and the character exactly as they are" in prompt and "Turn Hero toward the city" in prompt
+    staged = revision_prompt("brief", {**BASE, "scene_mismatch": True, "corrections": ["Turn Hero toward the city"]})
+    assert "character exactly as they are" in staged and "re-stage the shot, action and facing" in staged and "Turn Hero toward the city" in staged
+    assert "composition" not in staged.split("Change only")[0]
+    seam_only = revision_prompt("brief", {**BASE, "scene_mismatch": True, "seam": True, "corrections": ["Remove the dividing line"]})
+    assert "composition, camera, character exactly as they are" in seam_only and "re-stage" not in seam_only
 
 
-def test_faint_text_is_kept_by_the_check_itself_so_covers_keep_it_too():
+def test_faint_text_is_kept_by_the_check_for_panels_and_covers_but_not_the_sheet():
     from book_comic.art_check import inspect_art, require_checked
-    found = inspect_art(Image.new("RGB", (10, 10)), FakeVision(lambda p, i: {**BASE, "head_top": 400, "has_text": True, "text_prominent": False}))
+    faint = lambda p, i: {**BASE, "head_top": 400, "has_text": True, "text_prominent": False}
+    found = inspect_art(Image.new("RGB", (10, 10)), FakeVision(faint), context="cover brief")
     assert found["has_text"] is False and found["faint_text"] is True and require_checked(found, require_head=True) is True
+    sheet = inspect_art(Image.new("RGB", (10, 10)), FakeVision(faint))  # no brief: the character sheet stays strict
+    assert sheet["has_text"] is True and require_checked(sheet) is False
 
 
 def test_a_seam_cut_is_marked_in_the_audit_and_a_deep_line_is_not_cut(noise):
@@ -302,3 +306,20 @@ def test_a_seam_cut_is_marked_in_the_audit_and_a_deep_line_is_not_cut(noise):
     deep = noise((400, 600))
     deep.paste((170, 172, 172), (0, 200, 400, 206))  # a third of the way down: a floor or table edge, left alone
     assert cut_seam(deep, (400, 600)) is None
+
+
+def test_the_fresh_third_draw_is_told_about_every_rejected_draw():
+    """Review 2026-11-05: a revision can fix one defect and lose another; draw 3 carries both."""
+    from book_comic.comic_rules import ANATOMY_RULE, NO_TEXT_RULE
+    images = FakeImages(colours("red", "green", "blue"))
+    vision = judge({RED: {"has_text": True, "text_prominent": True}, GREEN: {"bad_anatomy": True}})
+    art = draw_checked(images, vision, "scene", [], "2:3", fallback=True)
+    third = images.calls[2]["prompt"]
+    assert art.getpixel((0, 0)) == BLUE and NO_TEXT_RULE.strip() in third and ANATOMY_RULE.strip() in third
+
+
+def test_cover_scene_drops_a_limb_only_clause_with_the_shot():
+    from book_comic.comic_rules import cover_scene
+    assert cover_scene("Extreme long shot: Hero on a rooftop, only his hands visible, holding a relic.") == "Hero on a rooftop, holding a relic."
+    assert cover_scene("Hero kneels by the relic, her boot at the edge of the frame; rain falls.") == "Hero kneels by the relic, rain falls."
+    assert cover_scene("Hero stands on the pier at dawn.") == "Hero stands on the pier at dawn."

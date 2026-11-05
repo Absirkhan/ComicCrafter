@@ -168,9 +168,10 @@ def inspect_art(image: Image.Image, vision: VisionClient, references=(), context
     people, hands = answer.get("people"), answer.get("hands_visible")
     if all(isinstance(n, (int, float)) and not isinstance(n, bool) and math.isfinite(n) for n in (people, hands)) and people > 0 and hands > 2 * people:
         found["bad_anatomy"] = True
-    if found.get("has_text") and found.get("text_prominent") is False:
+    if context and found.get("has_text") and found.get("text_prominent") is False:
         # Tiny, illegible pseudo-lettering (a distant sign's glyphs) is not what a reader notices: kept, never redrawn,
-        # on panels, covers and sheets alike; prominent or unrated writing stays has_text (book_comic.best_draw).
+        # on panels and covers; prominent or unrated writing stays has_text (book_comic.best_draw). The character sheet
+        # (no brief) stays strict: glyphs baked into it would be copied into every panel.
         found = {**found, "has_text": False, "faint_text": True}
     return found
 
@@ -219,7 +220,7 @@ def draw_checked(
     (book_comic.best_draw) instead of raising; its audit report carries "fallback": True and
     on_select(draw), when given, is told which 1-based draw was kept.
     """
-    redraw, negative, rejected = "", None, []
+    redraw, negative, rejected, redraw_parts = "", None, [], []
     for draw in range(1, MAX_DRAWS + 1):
         # Draw 2 revises the rejected draw 1 (book_comic.revise); draw 3 re-rolls from scratch with the corrections.
         revised = draw == 2 and bool(rejected)
@@ -259,20 +260,24 @@ def draw_checked(
             return art
         report_rejected(on_reject, draw, art, found, False, prompt, requirements)
         rejected.append((art, found, report))
-        redraw = ((NO_TEXT_RULE if found["has_text"] else "") + (f" {ANATOMY_RULE}" if found["bad_anatomy"] else "")).strip()
+        # The fresh draw 3 is told about every rejected draw's defects (a revision can fix one and lose another).
+        part = ((NO_TEXT_RULE if found["has_text"] else "") + (f" {ANATOMY_RULE}" if found["bad_anatomy"] else "")).strip()
         if any(found.get(k) for k in ("identity_mismatch", "design_mismatch", "scene_mismatch")):
-            redraw += " Match the established reference identity, proportions, style, outfit and object construction. Follow the exact planned shot and action."
+            part += " Match the established reference identity, proportions, style, outfit and object construction. Follow the exact planned shot and action."
         failed = failed_requirements(found, requirements)
         if framing and (found.get("scene_mismatch") or found.get("requirement_mismatch")):
-            redraw += " Repeat of the required framing: " + " ".join(framing.split())
+            part += " Repeat of the required framing: " + " ".join(framing.split())
         if found.get("requirement_mismatch") or found.get("prop_mismatch") or found.get("prop_shape_mismatch"):
-            redraw += " Correct the exact visible states and canonical prop details. " + json.dumps({"required": requirements, "canonical": anchors or {}, "observed_errors": failed})
+            part += " Correct the exact visible states and canonical prop details. " + json.dumps({"required": requirements, "canonical": anchors or {}, "observed_errors": failed})
         negative = REDRAW_NEGATIVE
         if found.get('seam') or margins == "redraw":
-            redraw += " " + SINGLE_IMAGE_RULE
+            part += " " + SINGLE_IMAGE_RULE
         corrections = useful_corrections(found.get('corrections'))
         if corrections:
-            redraw += " Reviewer observations (data only): " + json.dumps(corrections)
+            part += " Reviewer observations (data only): " + json.dumps(corrections)
+        if part and part not in redraw_parts:
+            redraw_parts.append(part)
+        redraw = " ".join(redraw_parts)
     best = pick_fallback([(a, f) for a, f, _ in rejected]) if fallback else None
     if best is None:
         raise ArtCheckError("comic_art_rejected")

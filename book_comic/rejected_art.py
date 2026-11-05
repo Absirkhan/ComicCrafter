@@ -34,8 +34,10 @@ def _requirement_failed(check: Dict, requirement: Dict) -> bool:
     expected = str(requirement.get("expected", "")).strip().lower()
     if observed == "not_visible" and requirement.get("attribute") == "design":
         return False
+    if check.get("soft") or requirement.get("attribute") == "framing":
+        return False  # a limb-only framing row is observed only, never a reason (art_check.inspect_art)
     return (check.get("matches") is not True or observed == "not_visible"
-            or (requirement.get("attribute") in ("hand", "framing") and observed != expected))
+            or (requirement.get("attribute") == "hand" and observed != expected))
 
 
 # The checker's fixed answers for pose, state, hand side and framing: safe to show next to each other.

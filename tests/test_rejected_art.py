@@ -139,5 +139,5 @@ def test_a_one_word_requirement_answer_reads_expected_versus_seen(tmp_path):
     draw_checked(FakeImages(colours("red", "blue")), FakeVision(lambda p, i: next(draws)), SCENE, [], "2:3",
                  requirements=requirements, on_reject=saver.hook("panel", 2))
     reasons = records(out)["panel_p2_d1.json"]["reasons"]
-    assert reasons == ["state: expected open, saw closed", "framing: expected hand detail only, saw body visible", "military jacket"]
+    assert reasons == ["state: expected open, saw closed", "military jacket"]  # a framing row is observed only, never a reason
     assert "journal" not in json.dumps(reasons) and "teal blazer" not in json.dumps(reasons)

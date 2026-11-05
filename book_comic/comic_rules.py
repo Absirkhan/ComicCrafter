@@ -170,7 +170,15 @@ def cover_scene(scene: str) -> str:
     contradicts it, so the vision check failed every draw as a scene mismatch (BOOKS-37, 2026-11-05).
     """
     shot = scene_shot(scene)
-    return scene.strip()[len(shot) + 1:].strip() if shot else scene
+    bare = scene.strip()[len(shot) + 1:].strip() if shot else scene
+    # "only his hands visible", "a boot at the edge of the frame": the clause goes, the cover shows the hero.
+    clauses = [c for c in re.split(r"(?<=[,;])\s+", bare) if not _LIMB_CLAUSE.search(c)]
+    return re.sub(r"[,;]\s*(?=[.!?]|$)", "", " ".join(clauses)).strip() if clauses else bare
+
+
+_LIMB_CLAUSE = re.compile(r"\bonly\b[^.;]{0,40}?\b(?:hands?|fingers?|palms?|fists?|wrists?|arms?|feet|foot|boots?|shoes?|legs?)\b[^.;]{0,40}?"
+                          r"\b(?:visible|in frame|in the frame|in shot|in view)\b|\bedge of the (?:frame|panel|image|shot)\b|"
+                          r"\bout of (?:frame|shot|view)\b|\boff[- ](?:panel|frame|screen)\b", re.I)
 
 
 def scene_shot(scene: str) -> Optional[str]:
