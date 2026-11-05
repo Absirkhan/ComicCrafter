@@ -238,7 +238,7 @@ def test_the_second_draw_revises_the_first_and_the_third_rerolls():
     first, second, third = images.calls
     assert first["references"] == ["data:photo", "data:sheet"] and REVISE_MARK not in first["prompt"]
     assert second["prompt"].startswith(REVISE_MARK) and "Remove the gloves" in second["prompt"] and "scene brief" in second["prompt"]
-    assert second["references"][:2] == ["data:photo", "data:sheet"] and second["references"][2].startswith("data:image/png;base64,")
+    assert second["references"][:2] == ["data:photo", "data:sheet"] and second["references"][2].startswith("data:image/jpeg;base64,")
     assert third["references"] == ["data:photo", "data:sheet"] and REVISE_MARK not in third["prompt"]
 
 
@@ -261,3 +261,44 @@ def test_a_bottom_strip_is_cut_off_but_a_mid_height_seam_is_left_to_the_revision
     middle = noise((400, 600))
     middle.paste((170, 172, 172), (0, 300, 400, 305))
     assert seam_band(middle) is None and cut_seam(middle, (400, 600)) is None
+
+
+def test_the_revision_carries_prop_evidence_and_never_a_framing_row():
+    """Review 2026-11-05: a limb-only framing row is observed only and must not steer the revision; a wrong prop needs evidence."""
+    from book_comic.art_check import inspect_art
+    from book_comic.revise import revision_prompt
+    requirements = [{"subject": "frame", "attribute": "framing", "expected": "hand_detail_only"}, {"subject": "book", "attribute": "state", "expected": "closed"}]
+    answer = {**BASE, "head_top": 400, "design_mismatch": True,
+              "requirement_checks": [{"index": 0, "observed": "body_visible", "matches": False}, {"index": 1, "observed": "open", "matches": False}],
+              "prop_checks": [{"name": "the lantern", "visible": True, "observed": "a cream clock face", "matches": False}]}
+    found = inspect_art(Image.new("RGB", (10, 10)), FakeVision(lambda p, i: answer), context="brief", requirements=requirements,
+                        props=[{"name": "the lantern", "look": "brass lantern"}], anchors={"the lantern": "turquoise disk"})
+    assert found["requirement_checks"][0]["soft"] is True and "soft" not in found["requirement_checks"][1]
+    prompt = revision_prompt("brief", found, (), requirements, {"the lantern": "turquoise disk"})
+    assert "hand_detail_only" not in prompt.split("The original brief")[0]
+    assert '"observed": "open"' in prompt and '"prop": "the lantern"' in prompt and '"canonical": "turquoise disk"' in prompt
+    assert "redrawing only the character's face, hair, proportions or outfit" in prompt and ", and the character" not in prompt
+
+
+def test_a_revision_without_a_character_defect_keeps_the_character():
+    from book_comic.revise import revision_prompt
+    prompt = revision_prompt("brief", {**BASE, "scene_mismatch": True, "corrections": ["Turn Hero toward the city"]})
+    assert ", and the character exactly as they are" in prompt and "Turn Hero toward the city" in prompt
+
+
+def test_faint_text_is_kept_by_the_check_itself_so_covers_keep_it_too():
+    from book_comic.art_check import inspect_art, require_checked
+    found = inspect_art(Image.new("RGB", (10, 10)), FakeVision(lambda p, i: {**BASE, "head_top": 400, "has_text": True, "text_prominent": False}))
+    assert found["has_text"] is False and found["faint_text"] is True and require_checked(found, require_head=True) is True
+
+
+def test_a_seam_cut_is_marked_in_the_audit_and_a_deep_line_is_not_cut(noise):
+    from book_comic.seam import cut_seam
+    art = noise((400, 600))
+    art.paste((170, 172, 172), (0, 60, 400, 66))
+    audit = []
+    draw_checked(FakeImages([art]), FakeVision(lambda p, i: {**BASE, "head_top": 400}), "scene", [], "2:3", size=(400, 600), audit=audit)
+    assert audit[0]["seam_cut"] is True and audit[0]["accepted"] is True
+    deep = noise((400, 600))
+    deep.paste((170, 172, 172), (0, 200, 400, 206))  # a third of the way down: a floor or table edge, left alone
+    assert cut_seam(deep, (400, 600)) is None

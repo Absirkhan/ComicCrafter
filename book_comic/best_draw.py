@@ -4,7 +4,7 @@ Only draws without a hard defect qualify. Readable painted-in writing (letters o
 fake bubbles or captions, a signature), broken anatomy, a different face and a seam (a border or dividing line that
 splits the picture: a scene_mismatch whose correction names a seam, divider, border or strip) are what a reader
 notices at once, so a draw with any of them is never published. Tiny or illegible pseudo-lettering (text_prominent False), even on a map
-or page the hero holds, is soft: still redrawn, but a kept draw may carry it. The rest (scene, design,
+or page the hero holds, is kept outright (inspect_art turns it into faint_text). The rest (scene, design,
 requirement and prop drift) is ranked: fewest failed check flags first, then fewest failed requirement
 checks, then the latest draw (a redraw carries the check's corrections).
 """

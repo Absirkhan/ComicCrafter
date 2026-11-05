@@ -14,11 +14,10 @@ from PIL import Image, ImageOps
 from book_comic.best_draw import pick_fallback, unasked_gloves
 from book_comic.comic_rules import cover_scene
 from book_comic.margins import trim_margins
-from book_comic.scene_requirements import scene_requirements
-from book_comic.seam import find_seam  # noqa: F401  (re-exported: the panel path and tests import it from here)
+from book_comic.seam import find_seam
 from book_comic.art_check import ArtCheckError, inspect_art, request_art, require_checked
 from book_comic.cover_lettering import CoverFonts, letter_cover
-from book_comic.image_prompts import cover_prompt
+from book_comic.image_prompts import cover_prompt, cover_requirements
 from book_comic.rejected_art import report as report_rejected
 from book_comic.revise import data_url, revision_prompt
 from book_comic.render import image_url
@@ -90,7 +89,7 @@ def render_cover(
     """
     # A cover keeps its own framing: no planned shot and no limb-only crop from the scene (comic_rules.cover_scene).
     cover = {**cover, "scene": cover_scene(cover.get("scene", ""))}
-    requirements = [r for r in scene_requirements(cover["scene"], requirements) if r.get("attribute") != "framing"]
+    requirements = cover_requirements(cover["scene"], requirements)
     references, roles = list(references), list(reference_roles)
     strip = panel_strip(panels)
     if strip is not None:
@@ -103,7 +102,7 @@ def render_cover(
         # Draw 2 revises a rejected draw 1 (book_comic.revise); a skipped draw (margins, seam) leaves nothing to revise.
         revised = draw == 2 and bool(rejected)
         if revised:
-            art = request_art(images, revision_prompt(prompt, rejected[-1][1]), [*references, data_url(rejected[-1][0])], closest_aspect_ratio(*size))
+            art = request_art(images, revision_prompt(prompt, rejected[-1][1], (), requirements, prop_anchors), [*references, data_url(rejected[-1][0])], closest_aspect_ratio(*size))
         else:
             art = request_art(images, prompt, references, closest_aspect_ratio(*size))
         trimmed, margins = trim_margins(art, size[0] / size[1])
