@@ -15,6 +15,7 @@ from book_comic.best_draw import pick_fallback, unasked_gloves
 from book_comic.comic_rules import cover_scene
 from book_comic.margins import trim_margins
 from book_comic.scene_requirements import scene_requirements
+from book_comic.seam import find_seam  # noqa: F401  (re-exported: the panel path and tests import it from here)
 from book_comic.art_check import ArtCheckError, inspect_art, request_art, require_checked
 from book_comic.cover_lettering import CoverFonts, letter_cover
 from book_comic.image_prompts import cover_prompt
@@ -37,28 +38,6 @@ def _skipped(audit, draw: int, reason: str) -> None:
     """A cover draw thrown away before the vision check is recorded, so a failed cover shows why it had fewer checks."""
     if audit is not None:
         audit.append({"accepted": False, "kind": "cover", "draw": draw, "skipped": reason, "requirements": [], "checks": {}})
-
-
-def find_seam(image: Image.Image, search_share: float = 0.45) -> Optional[int]:
-    """The row just below a thin, flat, full-width line across the top of the art where the model
-    stacked a second strip; None when there is none. Only a run of at most 2% of the height with
-    textured art on both sides counts, so a plain sky is not a seam."""
-    import numpy as np
-    flat = np.asarray(image.convert("RGB"), dtype=np.float32).std(axis=1).max(axis=1) < 20
-    h = len(flat)
-    thin, gap = max(3, int(h * 0.02)), max(2, h // 300)
-    y = gap
-    while y < int(h * search_share):
-        if not flat[y]:
-            y += 1
-            continue
-        run_end = y
-        while run_end < h and flat[run_end]:
-            run_end += 1
-        if run_end - y <= thin and run_end + gap < h and not flat[y - gap] and not flat[run_end + gap]:
-            return run_end
-        y = run_end + 1
-    return None
 
 
 def panel_strip(arts: Sequence[Image.Image], height: int = 512, gap: int = 16) -> Optional[Image.Image]:
