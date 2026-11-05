@@ -14,7 +14,8 @@ from typing import Dict, List, Optional, Sequence, Tuple
 
 from book_comic.rejected_art import CHECK_NAMES
 
-HARD_DEFECTS = ("bad_anatomy", "identity_mismatch")
+# figure_visible: a back cover must show only the setting; a person there has no face check, so it is never kept.
+HARD_DEFECTS = ("bad_anatomy", "identity_mismatch", "figure_visible")
 # Unasked-for gloves (user decision 2026-11-04): the most common design drift, and a kept draw showed them.
 _GLOVES = re.compile(r"\b(?:fingerless|tactical|gloves?|gloved|mitts?)\b", re.I)
 BARE_HANDS_MARK = "Hands: bare skin on both hands"
