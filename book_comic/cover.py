@@ -85,7 +85,7 @@ def render_cover(
     reference_roles: Sequence[str] = (),
     fonts: Optional[CoverFonts] = None,
     dpi: Optional[int] = None,
-    requirements=(), prop_anchors=None, audit=None, on_reject=None,
+    requirements=(), prop_anchors=None, audit=None, on_reject=None, art_path: Optional[Path] = None,
 ) -> Path:
     """Draw and letter the cover; at most ATTEMPTS image calls.
 
@@ -105,6 +105,7 @@ def render_cover(
         fonts: Cover faces (cover["title_font"] still overrides the title face)
         dpi: DPI tag for the saved PNG
         on_reject: Optional hook that sees each inspected, rejected draw (see art_check.draw_checked)
+        art_path: Where to also save the chosen art unlettered (the back cover's style reference)
     """
     requirements = scene_requirements(cover.get("scene", ""), requirements)
     references, roles = list(references), list(reference_roles)
@@ -156,6 +157,8 @@ def render_cover(
         logger.warning(f"Cover: every draw was rejected; keeping the least-bad one (draw {best + 1})")
 
     dpi_tag = {"dpi": (dpi, dpi)} if dpi else {}
+    if art_path is not None:
+        art.save(art_path, format="PNG")
     # Move the title instead of drawing again when the accepted head is in the title block.
     letter_cover(art, cover, fonts, title_at_bottom=head < HEAD_TOP_MIN).save(path, format="PNG", optimize=True, **dpi_tag)
     logger.info(f"Saved cover {path}")

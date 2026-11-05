@@ -23,6 +23,7 @@ REFERENCE_ROLES = {
     "sheet": "the approved character design: same face, hair, outfit and marks",
     "previous": "the previous panel of this page",
     "panels": "the first page's panels side by side",
+    "style": "the comic's front cover, for drawing style, palette, lighting and world only",
 }
 
 PANEL_CRAFT = (
@@ -199,3 +200,23 @@ def acceptance_prompt(requirements=(), anchors=None):
     for name, appearance in (anchors or {}).items():
         facts.append(f"{name} has this established construction: {appearance}")
     return (" Required visible facts: " + "; ".join(facts) + ". ") if facts else ""
+
+
+def back_cover_prompt(cast: Dict, back: Dict, size: Optional[Tuple[int, int]] = None, roles: Sequence[str] = ()) -> str:
+    """Prompt for the back cover art: the story's setting with nobody in it. Never "text", "box" or "blurb" in the
+    composition: naming them makes the model paint lettering or an empty placeholder (NO_TEXT_RULE)."""
+    style_ref = ""
+    if "style" in roles:
+        style_ref = ("The attached front cover sets the drawing style, palette, line work and lighting; show a different "
+                     "view of the same world and never copy its figure, pose or composition. ")
+    return (
+        f"Full-page portrait comic illustration. Art style: {drawable_style(cast.get('style')) or 'detailed comic book art'}. "
+        f"Setting: {back.get('scene', '')} {canvas_shape(size)}{style_ref}"
+        "An atmospheric establishing view of this place with nobody in it: no people, characters, faces, silhouettes, "
+        "figures in windows or distant passers-by, and no animals with faces. Every street, sidewalk, square, window, balcony, "
+        "rooftop and vehicle is empty; a city far away shows only lit windows and outlines. Tell the story's mood through light, weather, "
+        "objects and architecture. Keep the upper half calm and low in detail (open sky, mist, deep shadow, a plain wall "
+        "or ceiling) and gather the setting's detail in the lower third and along the side edges. "
+        "One single continuous scene fills the whole canvas edge to edge, with no bands, strips, panels, borders or frames. "
+        f"{SINGLE_IMAGE_RULE} {NO_TEXT_RULE}"
+    )

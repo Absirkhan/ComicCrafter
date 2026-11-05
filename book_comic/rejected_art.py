@@ -16,7 +16,7 @@ from PIL import Image
 logger = logging.getLogger(__name__)
 
 CHECK_NAMES = ("has_text", "bad_anatomy", "identity_mismatch", "design_mismatch", "scene_mismatch",
-               "requirement_mismatch", "prop_mismatch", "prop_shape_mismatch")
+               "requirement_mismatch", "prop_mismatch", "prop_shape_mismatch", "figure_visible")
 UNAVAILABLE = "check_unavailable"
 MAX_SAVED = 12
 MAX_REASONS = 8
