@@ -20,6 +20,7 @@ from book_comic.art_check import ArtCheckError, inspect_art, request_art, requir
 from book_comic.cover_lettering import CoverFonts, letter_cover
 from book_comic.image_prompts import cover_prompt
 from book_comic.rejected_art import report as report_rejected
+from book_comic.revise import data_url, revision_prompt
 from book_comic.render import image_url
 from generation.openrouter_image_client import OpenRouterImageClient, closest_aspect_ratio
 from generation.vision_client import VisionClient
@@ -99,7 +100,12 @@ def render_cover(
 
     rejected = []
     for draw in range(1, ATTEMPTS + 1):
-        art = request_art(images, prompt, references, closest_aspect_ratio(*size))
+        # Draw 2 revises a rejected draw 1 (book_comic.revise); a skipped draw (margins, seam) leaves nothing to revise.
+        revised = draw == 2 and bool(rejected)
+        if revised:
+            art = request_art(images, revision_prompt(prompt, rejected[-1][1]), [*references, data_url(rejected[-1][0])], closest_aspect_ratio(*size))
+        else:
+            art = request_art(images, prompt, references, closest_aspect_ratio(*size))
         trimmed, margins = trim_margins(art, size[0] / size[1])
         if margins == "redraw" and draw < ATTEMPTS:
             _skipped(audit, draw, "margins")
@@ -115,7 +121,7 @@ def render_cover(
                             props=cast.get("props", []), anchors=prop_anchors)
         if unasked_gloves(found, prompt):
             found = {**found, "gloves": True}
-        report = {"accepted": None, "requirements": requirements, "checks": found, "kind": "cover"}
+        report = {"accepted": None, "requirements": requirements, "checks": found, "kind": "cover", **({"revised": True} if revised else {})}
         if audit is not None:
             audit.append(report)
         try:

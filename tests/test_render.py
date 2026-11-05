@@ -64,7 +64,7 @@ def test_art_with_painted_text_is_drawn_once_more():
     images = FakeImages([red, blue])
     art = draw_checked(images, FakeVision(lambda p, i: {"has_text": i.getpixel((0, 0)) == (255, 0, 0), "bad_anatomy": False, "identity_mismatch": False, "design_mismatch": False, "scene_mismatch": False}), "scene", ["ref"], "2:3")
     assert art.getpixel((0, 0)) == (0, 0, 255) and len(images.calls) == 2
-    assert "Absolutely no writing" in images.calls[1]["prompt"]
+    assert "no letters, words, numbers or glyphs anywhere" in images.calls[1]["prompt"]  # draw 2 revises draw 1
     images = FakeImages([red, blue])
     def broken(prompt, image):
         raise RuntimeError("down")
@@ -78,8 +78,8 @@ def test_art_with_a_third_hand_is_drawn_once_more_with_the_anatomy_rule():
     images = FakeImages([red, blue])
     art = draw_checked(images, FakeVision(lambda p, i: {"has_text": False, "bad_anatomy": i.getpixel((0, 0)) == (255, 0, 0), "identity_mismatch": False, "design_mismatch": False, "scene_mismatch": False}), "scene", [], "2:3")
     assert art.getpixel((0, 0)) == (0, 0, 255) and len(images.calls) == 2
-    assert images.calls[1]["prompt"].startswith("scene Human anatomy:")
-    assert "Absolutely no writing" not in images.calls[1]["prompt"]  # only the broken rule is repeated
+    assert images.calls[1]["prompt"].startswith("REVISE the last attached image") and "exactly two arms and two hands" in images.calls[1]["prompt"]
+    assert "no letters, words, numbers or glyphs anywhere" not in images.calls[1]["prompt"]  # only the broken rule is asked for
     images = FakeImages([red, blue])
     assert draw_checked(images, FakeVision(lambda p, i: {"has_text": False, "bad_anatomy": False, "identity_mismatch": False, "design_mismatch": False, "scene_mismatch": False}), "scene", [], "2:3") \
         .getpixel((0, 0)) == (255, 0, 0) and len(images.calls) == 1

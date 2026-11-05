@@ -172,7 +172,7 @@ def test_state_changes_draw_the_end_state_and_hidden_props_are_never_drawn():
 def test_the_art_style_is_never_drawn_as_paper_frame_or_margins():
     prompt = panel_prompt({"style": "woodcut comic, earthy inks on cream paper", "characters": []},
                           {"scene": "Wide shot: Hero in a modest apartment."}, "Hero: teal blazer")
-    assert "do not draw the paper, canvas, print, page edges, mat, frame or blank margins around the picture" in prompt
+    assert "with no drawn paper, canvas, print, page edges, mat, frame or blank margins" in prompt
 
 
 def test_a_hand_detail_carries_the_outfit_so_no_gloves_or_other_sleeve_are_invented():
