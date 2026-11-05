@@ -42,10 +42,14 @@ def data_url(image: Image.Image) -> str:
 
 def failed_requirements(found: Dict, requirements: Sequence[Dict] = ()) -> list:
     """The requirement rows the check saw unmet, without framing rows (observed only, never enforced)."""
-    rows = [c for c in found.get("requirement_checks") or [] if isinstance(c, dict)]
-    return [{"required": requirements[i] if i < len(requirements) else None, "observed": str(c.get("observed", ""))[:120]}
-            for i, c in enumerate(rows)
-            if c.get("matches") is not True and not (i < len(requirements) and requirements[i].get("attribute") == "framing")]
+    out = []
+    for i, c in enumerate(c for c in found.get("requirement_checks") or [] if isinstance(c, dict)):
+        index = c.get("index") if type(c.get("index")) is int else i  # the model's own index when the list is raw
+        requirement = requirements[index] if 0 <= index < len(requirements) else None
+        if requirement is None or c.get("matches") is True or c.get("soft") or requirement.get("attribute") == "framing":
+            continue
+        out.append({"required": requirement, "observed": str(c.get("observed", ""))[:120]})
+    return out
 
 
 def _wrong_props(found: Dict, anchors: Optional[Dict]) -> list:
@@ -71,11 +75,16 @@ def revision_prompt(brief: str, found: Dict, extra: Sequence[str] = (), requirem
         wanted.append("apply these reviewer corrections: " + "; ".join(corrections))
     if not wanted:
         wanted.append("the picture matches the brief's planned shot, action and expression")
+    # Keep only what was not the defect: a wrong shot, action or facing means the staging is redone; a wrong face or
+    # outfit means the character is redrawn to the references; a seam alone keeps everything.
     character = any(found.get(k) for k in _CHARACTER_FIXES)
-    keep = "composition, camera, setting, colours and art style" + ("" if character else ", and the character") + (
-        ", redrawing only the character's face, hair, proportions or outfit as the references show" if character else "")
+    staging = bool(found.get("requirement_mismatch")) or bool(found.get("scene_mismatch") and not found.get("seam"))
+    kept = ["setting", "colours", "art style"] + ([] if staging else ["composition", "camera"]) + ([] if character else ["character"])
+    redo = (["re-stage the shot, action and facing exactly as the brief plans them"] if staging else []) + (
+        ["redraw the character's face, hair, proportions and outfit as the references show"] if character else [])
+    keep = ", ".join(kept) + " exactly as they are" + (", and " + "; ".join(redo) if redo else "")
     return (
-        f"{REVISE_MARK}, which is your previous attempt at this picture. Keep its {keep} exactly as they are. "
+        f"{REVISE_MARK}, which is your previous attempt at this picture. Keep its {keep}. "
         "Change only the following, and do not change any other element of the image: " + "; ".join(wanted) + ". "
         "The original brief follows for its rules only; the scene is already staged in the attached attempt. " + brief
     )

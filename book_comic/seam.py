@@ -1,10 +1,10 @@
 """A seam: a thin flat full-width line where the image model stacked a second strip over the scene.
 
-find_seam keeps the cover's contract (a strip across the top; the row below it). cut_seam, for panels, also takes
-a strip across the bottom, and leaves a seam in the middle alone: a stacked strip is a band of at most STRIP of the
-height; cutting more would crop the panel to a sliver when it is fitted back to its size, and a flat line deeper in
-the picture is more likely a floor or table edge (a mid-height seam is for the revision or a fresh draw,
-book_comic.revise). The audit marks a cut draw ("seam_cut").
+find_seam keeps the cover's contract (a strip across the top; the row below it). cut_seam, for panels, cuts the
+same kind of strip: a band of at most STRIP of the height across the top. A flat line anywhere lower is left alone,
+because a floor, table or water edge looks the same to a pixel scan and cutting there would publish a panel without
+its feet (review 2026-11-05); a seam lower down is for the revision or a fresh draw (book_comic.revise). The audit
+marks a cut draw ("seam_cut"), and the vision check sees the cut art.
 """
 from typing import List, Optional, Tuple
 
@@ -43,17 +43,14 @@ def find_seam(image: Image.Image, search_share: float = 0.45) -> Optional[int]:
 
 
 def seam_band(image: Image.Image) -> Optional[Tuple[int, int]]:
-    """The (start, end) rows of a seam within STRIP of the top or the bottom edge, else None."""
+    """The (start, end) rows of a seam within STRIP of the top edge, else None."""
     runs, h = _runs(image)
-    return next(((start, end) for start, end in runs if end <= h * STRIP or start >= h * (1 - STRIP)), None)
+    return next(((start, end) for start, end in runs if end <= h * STRIP), None)
 
 
 def cut_seam(art: Image.Image, size: Tuple[int, int]) -> Optional[Image.Image]:
-    """The art with the strip beyond a top or bottom seam cut off and fitted back to size, or None when there is no such seam."""
+    """The art with the strip above a top seam cut off and fitted back to size, or None when there is no such seam."""
     band = seam_band(art)
     if band is None:
         return None
-    start, end = band
-    if end <= art.height * STRIP:
-        return ImageOps.fit(art.crop((0, end, art.width, art.height)), size, Image.Resampling.LANCZOS, centering=(0.5, 0.0))
-    return ImageOps.fit(art.crop((0, 0, art.width, start)), size, Image.Resampling.LANCZOS, centering=(0.5, 1.0))
+    return ImageOps.fit(art.crop((0, band[1], art.width, art.height)), size, Image.Resampling.LANCZOS, centering=(0.5, 0.0))

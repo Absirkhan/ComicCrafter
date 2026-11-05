@@ -87,9 +87,9 @@ def render_cover(
         on_reject: Optional hook that sees each inspected, rejected draw (see art_check.draw_checked)
         art_path: Where to also save the chosen art unlettered (the back cover's style reference)
     """
-    # A cover keeps its own framing: no planned shot and no limb-only crop from the scene (comic_rules.cover_scene).
-    cover = {**cover, "scene": cover_scene(cover.get("scene", ""))}
-    requirements = cover_requirements(cover["scene"], requirements)
+    # A cover keeps its own framing: the prompt strips the scene's shot and limb-only clauses (image_prompts.cover_prompt);
+    # the check uses the same scene and the same requirements, without framing.
+    requirements = cover_requirements(cover_scene(cover.get("scene", "")), requirements)
     references, roles = list(references), list(reference_roles)
     strip = panel_strip(panels)
     if strip is not None:

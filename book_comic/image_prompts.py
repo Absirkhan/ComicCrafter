@@ -6,7 +6,7 @@ None of the lettering (captions, dialogue, titles) is ever sent to the image mod
 from typing import Dict, Optional, Sequence, Tuple
 
 from book_comic.scene_requirements import scene_requirements
-from book_comic.comic_rules import ANATOMY_RULE, NO_TEXT_RULE, OUTFIT_LOCK, bare_hands, PANEL_RULES, SINGLE_IMAGE_RULE, crowd_rule, props_rule
+from book_comic.comic_rules import ANATOMY_RULE, NO_TEXT_RULE, OUTFIT_LOCK, PANEL_RULES, SINGLE_IMAGE_RULE, bare_hands, cover_scene, crowd_rule, props_rule
 from book_comic.framing import detail_framing, framing_block
 from book_comic.lettering_space import lettering_space
 from book_comic.margins import drawable_style
@@ -160,6 +160,8 @@ def cover_prompt(cast: Dict, cover: Dict, roles: Sequence[str] = ()) -> str:
     """Prompt for a portrait cover. Never "title" or "text" in the composition lines: naming them makes
     the model paint lettering, and asking for an empty top made it stack a second strip with a seam."""
     hero = (cast.get("characters") or [{}])[0]
+    # The cover owns its framing: the scene's planned shot and any limb-only clause go (comic_rules.cover_scene).
+    scene = cover_scene(cover.get("scene", ""))
     strip = ""
     if "panels" in roles:
         strip = (
@@ -169,8 +171,8 @@ def cover_prompt(cast: Dict, cover: Dict, roles: Sequence[str] = ()) -> str:
         )
     return (
         f"Full-page portrait comic illustration. Art style: {drawable_style(cast.get('style')) or 'detailed comic book art'}. "
-        f"Scene: {cover.get('scene', '')} Main character: {hero.get('name_en', '')}: {hero.get('look', '')} "
-        f"{bare_hands(hero.get('look', ''), cover.get('scene', ''), _props_text(cast, cover.get('scene', '')))}"
+        f"Scene: {scene} Main character: {hero.get('name_en', '')}: {hero.get('look', '')} "
+        f"{bare_hands(hero.get('look', ''), scene, _props_text(cast, scene))}"
         f"{describe_references(roles)}{strip}"
         "Show the emotion clearly in the eyes and mouth. Build a clear focal hierarchy around the main character's "
         "face, gesture and the story's meaningful prop or clue. Make the silhouette readable at thumbnail size, with "
@@ -180,7 +182,7 @@ def cover_prompt(cast: Dict, cover: Dict, roles: Sequence[str] = ()) -> str:
         "in the frame without forcing a standing pose: follow the scene's action. Aim for the head about one third "
         "of the way down the canvas when that pose permits, with more of the setting "
         "(its sky, ceiling or upper wall) above it, and let the bottom edge fade slightly darker. "
-        f"{acceptance_prompt(cover_requirements(cover.get('scene', ''), cover.get('requirements', [])), cast.get('prop_anchors'))}{props_rule(cast)}{ANATOMY_RULE}{NO_TEXT_RULE}"
+        f"{acceptance_prompt(cover_requirements(scene, cover.get('requirements', [])), cast.get('prop_anchors'))}{props_rule(cast)}{ANATOMY_RULE}{NO_TEXT_RULE}"
     )
 
 
