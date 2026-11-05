@@ -12,6 +12,7 @@ from typing import Dict, Optional, Sequence
 from PIL import Image, ImageOps
 
 from book_comic.best_draw import pick_fallback, unasked_gloves
+from book_comic.comic_rules import cover_scene
 from book_comic.margins import trim_margins
 from book_comic.scene_requirements import scene_requirements
 from book_comic.art_check import ArtCheckError, inspect_art, request_art, require_checked
@@ -107,7 +108,9 @@ def render_cover(
         on_reject: Optional hook that sees each inspected, rejected draw (see art_check.draw_checked)
         art_path: Where to also save the chosen art unlettered (the back cover's style reference)
     """
-    requirements = scene_requirements(cover.get("scene", ""), requirements)
+    # A cover keeps its own framing: no planned shot and no limb-only crop from the scene (comic_rules.cover_scene).
+    cover = {**cover, "scene": cover_scene(cover.get("scene", ""))}
+    requirements = [r for r in scene_requirements(cover["scene"], requirements) if r.get("attribute") != "framing"]
     references, roles = list(references), list(reference_roles)
     strip = panel_strip(panels)
     if strip is not None:

@@ -164,6 +164,16 @@ def establishing_shot(scene: str) -> str:
     return "Wide shot:" + scene.strip()[len("Extreme long shot:"):]
 
 
+def cover_scene(scene: str) -> str:
+    """The cover scene without a leading shot ("Extreme long shot: ..."): a cover always uses its own framing.
+
+    The cover prompt asks for the hero from the knees up or full length; a planned extreme long shot (a tiny figure)
+    contradicts it, so the vision check failed every draw as a scene mismatch (BOOKS-37, 2026-11-05).
+    """
+    shot = scene_shot(scene)
+    return scene.strip()[len(shot) + 1:].strip() if shot else scene
+
+
 def scene_shot(scene: str) -> Optional[str]:
     """The shot a scene starts with ("Medium shot: ..."), or None."""
     return next((shot for shot in COMIC_SHOTS if scene.strip().startswith(f"{shot}:")), None)

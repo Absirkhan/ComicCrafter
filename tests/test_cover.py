@@ -141,3 +141,22 @@ def test_a_cover_with_readable_text_on_every_draw_is_still_never_published(tmp_p
     with pytest.raises(ValueError, match='comic_cover_rejected'):
         render_cover(CAST, COVER, (400, 600), tmp_path / 'c.png', FakeImages([Image.new('RGB', (400, 600), 'blue')]),
                      FakeVision(lambda p, i: answer))
+
+
+def test_a_cover_scene_drops_its_planned_shot_and_limb_crop(tmp_path):
+    """BOOKS-37: "Extreme long shot:" on the cover contradicted the cover's knees-up framing; every draw failed."""
+    scene = 'Extreme long shot: Adult Hero stands on a rainy rooftop, only his hands visible, holding a glowing relic.'
+    images = FakeImages([Image.new('RGB', (400, 600), 'blue')])
+    seen = []
+    clean = {'head_top': 400, 'has_text': False, 'bad_anatomy': False, 'identity_mismatch': False, 'design_mismatch': False, 'scene_mismatch': False}
+    render_cover(CAST, {**COVER, 'scene': scene}, (400, 600), tmp_path / 'cover.png', images, FakeVision(lambda p, i: seen.append(p) or clean))
+    prompt = images.calls[0]['prompt']
+    assert 'Scene: Adult Hero stands on a rainy rooftop' in prompt
+    assert 'Extreme long shot' not in prompt and 'hand_detail_only' not in prompt
+    assert seen and all('Extreme long shot' not in p for p in seen)
+
+
+def test_cover_scene_keeps_a_scene_without_a_shot():
+    from book_comic.comic_rules import cover_scene
+    assert cover_scene('Wide shot: A street at night.') == 'A street at night.'
+    assert cover_scene('A street at night, a wide shot of it.') == 'A street at night, a wide shot of it.'
