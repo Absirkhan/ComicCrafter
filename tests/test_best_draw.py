@@ -157,10 +157,34 @@ def test_prominent_or_unrated_text_stays_a_hard_defect(prominent):
         draw_checked(images, judge({RED: text, GREEN: text, BLUE: text}), "scene", [], "2:3", fallback=True)
 
 
-def test_background_text_is_still_redrawn_before_any_fallback():
+def test_faint_background_text_is_kept_without_a_redraw():
+    """Tiny illegible glyphs on a distant sign are not what a reader notices (18 of 182 corrections, 2026-11-05)."""
     images = FakeImages(colours("red", "green"))
     art = draw_checked(images, judge({RED: {"has_text": True, "text_prominent": False}}), "scene", [], "2:3", fallback=True)
-    assert art.getpixel((0, 0)) == GREEN and len(images.calls) == 2
+    assert art.getpixel((0, 0)) == RED and len(images.calls) == 1
+    assert art.info["comic_verification"]["faint_text"] is True and art.info["comic_verification"]["has_text"] is False
+
+
+def test_a_panel_seam_is_cut_off_locally_before_the_check(noise):
+    from book_comic.seam import find_seam
+    art = noise((400, 600))
+    art.paste((170, 172, 172), (0, 120, 400, 126))
+    assert find_seam(art) == 126
+    seen = []
+    images = FakeImages([art])
+    kept = draw_checked(images, FakeVision(lambda p, i: seen.append(i) or {**BASE, "head_top": 400}), "scene", [], "2:3", size=(400, 600))
+    assert len(images.calls) == 1 and kept.size == (400, 600)
+    assert find_seam(seen[0]) is None and find_seam(kept) is None
+
+
+def test_the_check_judges_props_people_and_garments_as_a_reader_would():
+    from book_comic.art_check import inspect_art
+    vision = FakeVision(lambda p, i: {**BASE, "head_top": 400})
+    inspect_art(Image.new("RGB", (10, 10)), vision, context="brief", props=[{"name": "the lantern", "look": "brass lantern"}])
+    prompt = vision.prompts[0]
+    assert "A prop matches when a reader would recognise it as the listed prop" in prompt
+    assert "a distant, faceless background figure or silhouette alone is not a mismatch" in prompt
+    assert "never sleeve length, fit, folds, trim or shade" in prompt
 
 
 def test_the_check_asks_for_text_prominence_and_allows_dial_numerals():

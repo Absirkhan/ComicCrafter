@@ -60,7 +60,7 @@ def test_lettered_panel_reserves_natural_background_without_sending_its_words():
     ('design', 'brass trim', 'not_visible', False),
     ('state', 'closed', 'open', True),
     ('hand', 'right', 'left', True),
-    ('framing', 'hand_detail_only', 'body_visible', True),
+    ('framing', 'hand_detail_only', 'body_visible', False),  # observed only: a reader keeps the fuller draw
 ])
 def test_hidden_design_is_not_a_redesign_but_visible_contradictions_still_fail(attribute, expected, observed, rejected):
     answer = {'has_text': False, 'bad_anatomy': False,

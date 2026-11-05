@@ -12,6 +12,7 @@ from book_comic.comic_rules import ANATOMY_RULE, NO_TEXT_RULE, SEAM_CORRECTION, 
 from book_comic.lettering_space import CHECK_NOTE, useful_corrections
 from book_comic.margins import MARGIN_CORRECTION, target_aspect, trim_margins
 from book_comic.rejected_art import report as report_rejected, report_selected
+from book_comic.seam import find_seam
 from generation.openrouter_image_client import OpenRouterImageClient
 from generation.vision_client import VisionClient
 
@@ -64,8 +65,8 @@ def inspect_art(image: Image.Image, vision: VisionClient, references=(), context
             " The FIRST attached image is the candidate; inspect only it for unwanted writing and anatomy. "
             "The generation brief's reference image N is attached image N+1, after the candidate. "
             "Return additional booleans identity_mismatch (different face, age, hair, facial hair or head/body proportions), "
-            "design_mismatch (wrong style, garment construction, prop geometry or recurring companion design), and "
-            "scene_mismatch (wrong planned shot, expression, focal action, movement direction, essential object state or extra human characters). "
+            "design_mismatch (wrong style, a different garment or hairstyle, a missing or added major garment, gloves, changed prop geometry or recurring companion design; never sleeve length, fit, folds, trim or shade), and "
+            "scene_mismatch (wrong planned shot, expression, focal action, movement direction, essential object state, or another person near the hero or in focus; a distant, faceless background figure or silhouette alone is not a mismatch). "
             "Compare the photo for likeness, the sheet for illustrated character design and the earlier panels for "
             "world/prop continuity. The current scene may explicitly change location, time, lighting, prop position or state. "
             "Opening, glowing, approved damage and companion movement are not redesigns. "
@@ -97,8 +98,10 @@ def inspect_art(image: Image.Image, vision: VisionClient, references=(), context
             "Return prop_checks, one per listed prop: {name:string, visible:boolean, observed:string, matches:boolean}. "
             "For visible props describe identifying details including dial face colour, needles/markings, shape, "
             "material and size relative to the hero. Compare to canonical observed designs when supplied. "
-            "A cream clock face with a needle is a different design from a turquoise disk. Compare each visible "
-            "detail separately; broad similarity is insufficient. Mark not_visible for an occluded requirement "
+            "A prop matches when a reader would recognise it as the listed prop: matches is false only for a different object, "
+            "a different shape class, a different dominant colour family or a missing defining part (a cream clock face with a "
+            "needle is a different design from a turquoise disk); differences of shade, glow, texture, detail density, size or "
+            "viewing angle match. Mark not_visible for an occluded requirement "
             "rather than inventing evidence. For each prop with a required_shape, also return observed_shape: triangular_prism, other, uncertain, or not_visible. A triangular prism has three main sides at its cross-section; a hexagonal crystal rod, pointed crystal or obelisk is other. Do not infer shape from the brief or blue glow. If the relevant faces are hidden use uncertain. Verification data: "
             + json.dumps({"requirements": [{"index": i, **r} for i, r in enumerate(requirements)], "props": props, "canonical_designs": anchors or {}, "required_shapes": shapes}, ensure_ascii=False)
         )
@@ -137,7 +140,9 @@ def inspect_art(image: Image.Image, vision: VisionClient, references=(), context
                     check = ordered[i]
                     expected, observed = requirement["expected"].strip().lower(), check["observed"].strip().lower()
                     literal_states = {"standing", "kneeling", "seated", "crouching", "open", "closed", "flat", "upright"}
-                    if requirement["attribute"] in ("hand", "framing") and observed != expected:
+                    if requirement["attribute"] == "framing":
+                        continue  # observed only: no image model holds a limb-only crop, and a reader keeps the fuller draw
+                    if requirement["attribute"] == "hand" and observed != expected:
                         mismatch = True
                     if observed == "not_visible" and requirement["attribute"] == "design":
                         continue  # a hidden identifying detail is not an observed redesign
@@ -170,7 +175,7 @@ def _valid_evidence(check, allow_hidden=False):
 
 
 def require_checked(found, require_head=False):
-    flags = [v for k, v in found.items() if k not in ("head_top", "text_prominent", "requirement_checks", "prop_checks", "corrections", "seam", "gloves")]
+    flags = [v for k, v in found.items() if k not in ("head_top", "text_prominent", "requirement_checks", "prop_checks", "corrections", "seam", "gloves", "faint_text")]
     if any(type(v) is not bool for v in flags) or (require_head and found["head_top"] is None):
         raise ArtCheckError("comic_art_check_unavailable")
     return not any(flags)
@@ -219,7 +224,13 @@ def draw_checked(
             art = trimmed
         if size is not None:
             art = ImageOps.fit(art, size, Image.Resampling.LANCZOS)
+        if size is not None and (seam := find_seam(art)) is not None:
+            # A stacked strip over the scene is cut off locally, as on the cover, instead of spending a redraw.
+            art = ImageOps.fit(art.crop((0, seam, art.width, art.height)), size, Image.Resampling.LANCZOS, centering=(0.5, 0.0))
         found = inspect_art(art, vision, references=references, context=prompt, requirements=requirements, props=props, anchors=anchors)
+        if found.get("has_text") and found.get("text_prominent") is False:
+            # Tiny, illegible pseudo-lettering (a distant sign's glyphs) is not what a reader notices: kept, never redrawn.
+            found = {**found, "has_text": False, "faint_text": True}
         if margins == "redraw":
             found = {**found, "scene_mismatch": True, "corrections": [*(found.get("corrections") or []), MARGIN_CORRECTION]}
         if unasked_gloves(found, prompt):

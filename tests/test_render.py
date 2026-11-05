@@ -230,7 +230,7 @@ def test_crowded_art_rejects_without_shrinking_or_another_image_call(language, c
     assert len(vision.prompts) == 2 and len(images.calls) == 0  # one precise retry; never shrink or redraw artwork
 
 
-@pytest.mark.parametrize('attribute, expected, observed', [('pose','standing','kneeling'),('state','closed','open'),('state','flat','upright'),('hand','right','left'),('hand','right','ambiguous'),('framing','hand_detail_only','body_visible')])
+@pytest.mark.parametrize('attribute, expected, observed', [('pose','standing','kneeling'),('state','closed','open'),('state','flat','upright'),('hand','right','left'),('hand','right','ambiguous')])
 def test_literal_state_mismatch_cannot_pass_even_if_model_sets_matches_true(attribute, expected, observed):
     from book_comic.art_check import require_checked
     requirements = [{'subject':'Hero' if attribute == 'pose' else 'book', 'attribute':attribute, 'expected':expected}]
@@ -238,6 +238,17 @@ def test_literal_state_mismatch_cannot_pass_even_if_model_sets_matches_true(attr
     found = inspect_art(Image.new('RGB',(100,100)), FakeVision(lambda p,i:answer), requirements=requirements)
     assert found['requirement_mismatch'] is True
     assert require_checked(found) is False
+
+
+def test_a_limb_only_crop_is_observed_but_never_rejects_the_draw():
+    """No image model holds a hands-only crop (production 2026-11-05: three draws of a close-up rejected for showing
+    the hero over the relic); the fuller draw is what a reader wants, so framing is reported, never enforced."""
+    from book_comic.art_check import require_checked
+    requirements = [{'subject':'frame', 'attribute':'framing', 'expected':'hand_detail_only'}]
+    answer = {'has_text':False,'bad_anatomy':False, 'requirement_checks':[{'index':0,'observed':'body_visible','matches':False}]}
+    found = inspect_art(Image.new('RGB',(100,100)), FakeVision(lambda p,i:answer), requirements=requirements)
+    assert found['requirement_mismatch'] is False and found['requirement_checks'][0]['observed'] == 'body_visible'
+    assert require_checked(found) is True
 
 
 def test_missing_requirement_evidence_is_not_a_pass():

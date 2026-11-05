@@ -45,11 +45,13 @@ SHOT_SPACE = {"Extreme long shot": BAND, "Wide shot": BAND, "Medium shot": SIDE,
 CHECK_NOTE = (
     " CALM AREA lines in the brief are soft guidance for a later lettering step: never set scene_mismatch "
     "and never write a correction about head height, the upper third, lowering or shrinking a figure for lettering "
-    "clearance, or empty space for text. Shot fractions are approximate: a wide-shot figure filling up to about "
-    "three-quarters of the height with the head and feet visible is still a wide shot; an extreme long shot is "
-    "right while the surroundings dominate and the figure is a small full figure up to about one-third of the image "
-    "height, and wrong only when the figure is taller than that or cropped. Facing direction alone is never a reason "
-    "to fail an extreme long shot."
+    "clearance, or empty space for text. Judge the shot as a reader would, never by fractions: a wide shot is right "
+    "while the head and the feet are both visible, whatever share of the height the figure fills; an extreme long shot is "
+    "right while the surroundings dominate and the figure is a small full figure, and wrong only when the figure is taller "
+    "than about half the image height or cropped; a medium shot or close-up is right while its focal subject is near and "
+    "large. Facing direction alone is never a reason to fail an extreme long shot. Lines that ask to show only part of "
+    "the hero (only a hand, a boot at the frame edge, the face out of shot) are soft: a draw that shows more of the hero "
+    "is right while the named focal object is large, near and in focus; never set scene_mismatch for that alone."
 )
 LETTERING_CORRECTION = re.compile(
     r"\b(?:upper|top) third\b|\blettering (?:clearance|space|area|band)\b|\bclear(?:ance)? for (?:text|lettering|captions?)\b",
