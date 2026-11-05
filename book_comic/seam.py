@@ -12,12 +12,18 @@ from PIL import Image, ImageOps
 
 STRIP = 0.15  # a stacked strip is a band across the top; fitting the rest back to size crops at most this share of the width
 THIN = 0.02  # a seam is at most this share of the height; thicker flat bands are sky, floor or a wall
+MIN_ROWS = 3  # and at least this many rows: a 1–2 px flat line is a drawn horizon or ledge
 
 
 def _runs(image: Image.Image) -> Tuple[List[Tuple[int, int]], int]:
-    """(start, end) of every thin flat full-width run with textured art on both sides, and the height."""
+    """(start, end) of every thin flat full-width run with textured art on both sides, and the height.
+
+    Row flatness is the per-channel std across the row, computed in blocks of rows so a print-size image never
+    becomes one float32 copy of itself. A run shorter than MIN_ROWS is a drawn line, not a seam."""
     import numpy as np
-    flat = np.asarray(image.convert("RGB"), dtype=np.float32).std(axis=1).max(axis=1) < 20
+    rgb = image.convert("RGB")
+    pixels = np.asarray(rgb)
+    flat = np.concatenate([pixels[y:y + 256].astype(np.float32).std(axis=1).max(axis=1) < 20 for y in range(0, pixels.shape[0], 256)])
     h = len(flat)
     thin, gap = max(3, int(h * THIN)), max(2, h // 300)
     y, runs = gap, []
@@ -28,7 +34,7 @@ def _runs(image: Image.Image) -> Tuple[List[Tuple[int, int]], int]:
         run_end = y
         while run_end < h and flat[run_end]:
             run_end += 1
-        if run_end - y <= thin and run_end + gap < h and not flat[y - gap] and not flat[run_end + gap]:
+        if MIN_ROWS <= run_end - y <= thin and run_end + gap < h and not flat[y - gap] and not flat[run_end + gap]:
             runs.append((y, run_end))
         y = run_end + 1
     return runs, h

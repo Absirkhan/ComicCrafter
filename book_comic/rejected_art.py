@@ -29,7 +29,13 @@ def failed_checks(found: Dict, unavailable: bool = False) -> List[str]:
     return names + [UNAVAILABLE] if unavailable else names
 
 
-def _requirement_failed(check: Dict, requirement: Dict) -> bool:
+# A pose or state the checker cannot wave through with matches=true (art_check.inspect_art uses the same rule).
+LITERAL_STATES = frozenset({"standing", "kneeling", "seated", "crouching", "open", "closed", "flat", "upright"})
+
+
+def requirement_failed(check: Dict, requirement: Dict) -> bool:
+    """Whether the check saw this requirement unmet: the one rule for the check itself, the reasons, the revision,
+    the fallback ranking and the fresh third draw."""
     observed = str(check.get("observed", "")).strip().lower()
     expected = str(requirement.get("expected", "")).strip().lower()
     if observed == "not_visible" and requirement.get("attribute") == "design":
@@ -43,11 +49,8 @@ def _requirement_failed(check: Dict, requirement: Dict) -> bool:
     return check.get("matches") is not True or observed == "not_visible" or (literal and observed != expected)
 
 
-# A pose or state the checker cannot wave through with matches=true (art_check.inspect_art uses the same set).
-LITERAL_STATES = {"standing", "kneeling", "seated", "crouching", "open", "closed", "flat", "upright"}
 # The checker's fixed answers for pose, state, hand side and framing: safe to show next to each other.
-VOCABULARY = {"standing", "kneeling", "seated", "crouching", "open", "closed", "flat", "upright", "right", "left",
-              "ambiguous", "not_visible", "hand_detail_only", "feet_detail_only", "body_visible"}
+VOCABULARY = LITERAL_STATES | {"right", "left", "ambiguous", "not_visible", "hand_detail_only", "feet_detail_only", "body_visible"}
 VOCABULARY_ATTRIBUTES = ("pose", "state", "hand", "framing")
 
 
@@ -69,11 +72,9 @@ def unmet_requirements(found: Dict, requirements: Sequence[Dict]) -> List[Tuple[
     the checker says so, when the state is hidden, or when a literal contradiction (hand side, pose, state) was waved
     through with matches=true; a framing row never fails (observed only)."""
     pairs = []
-    for position, check in enumerate(found.get("requirement_checks") or []):
-        if not isinstance(check, dict):
-            continue
-        index = check.get("index") if type(check.get("index")) is int else position  # a raw list is in the brief's order
-        if 0 <= index < len(requirements) and _requirement_failed(check, requirements[index]):
+    for check in found.get("requirement_checks") or []:
+        index = check.get("index") if isinstance(check, dict) else None
+        if type(index) is int and 0 <= index < len(requirements) and requirement_failed(check, requirements[index]):
             pairs.append((check, requirements[index]))
     return pairs
 

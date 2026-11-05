@@ -364,13 +364,15 @@ def test_cover_scene_spares_the_sentences_around_a_limb_clause():
         "Hero on a rainy rooftop holding the relic." + direction
 
 
-def test_a_pose_waved_through_with_matches_true_and_a_raw_row_both_reach_the_revision():
+def test_a_pose_waved_through_with_matches_true_reaches_the_revision():
     from book_comic.revise import failed_requirements
     from book_comic.rejected_art import unmet_requirements
     requirements = [{"subject": "Hero", "attribute": "pose", "expected": "kneeling"}, {"subject": "book", "attribute": "state", "expected": "open"}]
-    found = {"requirement_checks": [{"index": 0, "observed": "standing", "matches": True}, {"observed": "closed", "matches": False}]}
-    assert [r["observed"] for _, r in [(c, c) for c, _ in unmet_requirements(found, requirements)]] == ["standing", "closed"]
+    found = {"requirement_checks": [{"index": 0, "observed": "standing", "matches": True}, {"index": 1, "observed": "closed", "matches": False}]}
+    assert [check["observed"] for check, _ in unmet_requirements(found, requirements)] == ["standing", "closed"]
     assert [row["required"]["attribute"] for row in failed_requirements(found, requirements)] == ["pose", "state"]
+    free_text = {"requirement_checks": [{"index": 0, "observed": "kneeling on one knee", "matches": True}]}
+    assert unmet_requirements(free_text, requirements) == []  # free text with matches=true is not a contradiction, anywhere
 
 
 def test_the_back_cover_keeps_faint_glyphs_like_any_cover():
@@ -379,7 +381,24 @@ def test_the_back_cover_keeps_faint_glyphs_like_any_cover():
     assert found["faint_text"] is True and require_checked(found) is True
 
 
-def test_cover_scene_opens_with_a_capital_and_drops_a_dangling_colon():
+def test_cover_scene_opens_with_a_capital_and_never_degenerates():
     from book_comic.comic_rules import cover_scene
     assert cover_scene("Only his hands visible, gripping the ledge. Hero on a rooftop.") == "Gripping the ledge. Hero on a rooftop."
     assert cover_scene("Hero waits. Expression and body language: only his hands visible.") == "Hero waits."  # the whole limb clause goes
+    degenerate = "Extreme long shot: ; only his hands visible."
+    assert cover_scene(degenerate) == "; only his hands visible."  # nothing but punctuation would be left: the scene as written
+
+
+def test_the_check_and_the_fallback_ranking_use_the_same_unmet_row_rule():
+    """Fifth review 2026-11-05: free text for a literal state no longer rejects; the ranking counts the shared rule."""
+    from book_comic.art_check import inspect_art
+    requirements = [{"subject": "Hero", "attribute": "pose", "expected": "kneeling"}]
+    answer = {**BASE, "head_top": 400, "requirement_checks": [{"index": 0, "observed": "kneeling on one knee", "matches": True}]}
+    found = inspect_art(Image.new("RGB", (10, 10)), FakeVision(lambda p, i: answer), context="brief", requirements=requirements)
+    assert found["requirement_mismatch"] is False
+    hidden_design = {**BASE, "scene_mismatch": True, "requirement_checks": [{"index": 0, "observed": "not_visible", "matches": False}]}
+    wrong_hand = {**BASE, "scene_mismatch": True, "requirement_checks": [{"index": 0, "observed": "left", "matches": True}]}
+    design_req = [{"subject": "Hero", "attribute": "design", "expected": "teal blazer"}]
+    hand_req = [{"subject": "Hero", "attribute": "hand", "expected": "right"}]
+    assert pick_fallback([(None, hidden_design), (None, {**BASE, "scene_mismatch": True})], design_req) == 1  # tie: the later draw
+    assert pick_fallback([(None, {**BASE, "scene_mismatch": True}), (None, wrong_hand)], hand_req) == 0  # the real contradiction loses

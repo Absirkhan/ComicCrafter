@@ -181,7 +181,9 @@ def cover_scene(scene: str) -> str:
     if not kept:
         return bare
     text = " ".join(kept)
-    text = re.sub(r"[,;:]\s*(?=[.!?]|$)", "", text).strip()  # a dangling separator before the end
+    text = re.sub(r"[,;]\s*(?=[.!?]|$)", "", text).strip()  # a dangling separator before the end
+    if not re.search(r"\w", text):
+        return bare  # nothing but punctuation left: the scene as written
     text = re.sub(r"(?<=[.!?]\s)([a-z])", lambda m: m.group(1).upper(), text)  # a clause now opening a sentence
     return text[:1].upper() + text[1:]
 
