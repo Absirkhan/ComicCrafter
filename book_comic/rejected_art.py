@@ -80,6 +80,8 @@ def unmet_requirements(found: Dict, requirements: Sequence[Dict]) -> List[Tuple[
 
 
 def _candidates(found: Dict, requirements: Sequence[Dict]) -> Iterable[object]:
+    if found.get("has_text"):
+        yield found.get("text_seen")  # "letter-like glyph on the card" (art_check.inspect_art)
     if found.get("requirement_mismatch"):
         for check, requirement in unmet_requirements(found, requirements):
             yield _requirement_reason(check, requirement)

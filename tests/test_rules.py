@@ -62,7 +62,7 @@ def test_neon_signs_are_light_shapes_never_letters_in_every_prompt_and_text_redr
     from book_comic.comic_rules import NO_TEXT_RULE
     from book_comic.image_prompts import cover_prompt, panel_prompt, sheet_prompt
     assert "Neon signs, shop signs, screens and holograms are abstract glowing shapes" in NO_TEXT_RULE
-    assert "never letters, words, numbers or letter-like glyphs" in NO_TEXT_RULE
+    assert "never letters, words, numbers, symbols or letter-like glyphs" in NO_TEXT_RULE
     cast = {"style": "ink comic", "characters": [{"name_en": "Hero", "look": "teal blazer"}]}
     hero = cast["characters"][0]
     for prompt in (panel_prompt(cast, {"scene": "Wide shot: neon street."}, "Hero: teal blazer"),

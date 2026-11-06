@@ -57,13 +57,19 @@ PANEL_RULES = (
     "any angle or distance. Keep costume construction fixed; an established handheld accessory may be held, "
     "worn or put down when the approved scene explicitly changes its position. "
 )
+# Always on, at the end of every image prompt (after the scene), so it overrides the scene: a back cover asking for
+# "a small white card ... with a black mirrored symbol" got an aleph-like glyph and was rejected for has_text.
+WORDLESS_OVERRIDE = (
+    "Whatever the scene says, nothing in the picture carries letters, numbers, symbols, glyphs or written marks; "
+    "any sign, card, label, note, map, book page or screen is blank or plain shapes."
+)
 NO_TEXT_RULE = (
-    "Wordless picture: every surface that could carry writing is plain. Walls, posters, murals, graffiti, billboards "
+    f"Wordless picture: {WORDLESS_OVERRIDE} Walls, posters, murals, graffiti, billboards "
     "and plaques are plain paint, texture or simple pictures. Neon signs, shop signs, screens and holograms are abstract "
-    "glowing shapes, stripes, arrows or simple icons; instrument faces use geometric ticks and pointers only; maps, pages, "
-    "labels and documents show plain colour fields and lines. Speech and captions are added later by the letterer, so the "
-    "picture carries no lettering of its own. Absolutely no writing anywhere in the image: never letters, words, numbers or "
-    "letter-like glyphs, and no speech bubbles, caption boxes or empty white placeholder rectangles."
+    "glowing shapes, stripes or plain geometric forms; instrument faces use geometric ticks and pointers only; maps, pages, "
+    "cards, labels and documents show plain colour fields and lines. Speech and captions are added later by the letterer, so the "
+    "picture carries no lettering of its own. Absolutely no writing anywhere in the image: never letters, words, numbers, "
+    "symbols or letter-like glyphs, and no speech bubbles, caption boxes or empty white placeholder rectangles."
 )
 # Every story panel: the model drifts the hero into tactical or military gear the sheet does not have
 OUTFIT_LOCK = (

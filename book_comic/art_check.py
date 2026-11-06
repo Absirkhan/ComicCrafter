@@ -17,12 +17,15 @@ from book_comic.seam import cut_seam
 from generation.openrouter_image_client import OpenRouterImageClient
 from generation.vision_client import VisionClient
 
+TEXT_SEEN_CHARS = 80
 INSPECT_PROMPT = (
     'Look at this illustration. Return one JSON object with all the requested fields. head_top: the top of '
     "the main character's head (hair or hat included) in thousandths of the image height, 0 the top edge, 1000 the "
     "bottom. has_text: true if the image contains any readable or garbled letters, words, captions, labels or signs, else "
     "false. Count sound effects, pseudo-lettering and empty speech bubbles or caption rectangles as has_text=true; "
     "do not count ordinary windows, doors, books or architectural panels as empty lettering containers. "
+    f"text_seen: when has_text is true, a short phrase (at most {TEXT_SEEN_CHARS} characters) naming the writing or mark "
+    "you saw and where, e.g. \"letter-like glyph on the card\"; null when has_text is false. "
     "bad_anatomy: true if any person has more than two arms or more than two hands, a hand with more than five "
     "fingers, or a genuinely duplicated/disconnected limb; false otherwise. A deliberate hand detail may hide "
     "the owner outside the crop: do not call it disconnected just because the head or body is not visible. "
@@ -53,7 +56,7 @@ def inspect_art(image: Image.Image, vision: VisionClient, references=(), context
     shapes = {p["name"]: prop_shape(p) for p in props if prop_shape(p)}
     if shapes:
         keys.append("prop_shape_mismatch")
-    found = {"head_top": None, "text_prominent": None, **dict.fromkeys(keys)}
+    found = {"head_top": None, "text_prominent": None, "text_seen": None, **dict.fromkeys(keys)}
     small = image.copy()
     small.thumbnail((2048, 2048))
     prompt = INSPECT_PROMPT + " Inspect instrument dials closely: words, cardinal letters (N, E, S, W) and invented letter-like markings count as has_text even when tiny; hour numerals, digits, ticks and needles on a watch, clock, compass or gauge face are normal and do not."
@@ -106,7 +109,7 @@ def inspect_art(image: Image.Image, vision: VisionClient, references=(), context
             "rather than inventing evidence. For each prop with a required_shape, also return observed_shape: triangular_prism, other, uncertain, or not_visible. A triangular prism has three main sides at its cross-section; a hexagonal crystal rod, pointed crystal or obelisk is other. Do not infer shape from the brief or blue glow. If the relevant faces are hidden use uncertain. Verification data: "
             + json.dumps({"requirements": [{"index": i, **r} for i, r in enumerate(requirements)], "props": props, "canonical_designs": anchors or {}, "required_shapes": shapes}, ensure_ascii=False)
         )
-    response_fields = ["head_top", "people", "hands_visible", "text_prominent", *[k for k in keys if k not in ("requirement_mismatch", "prop_mismatch", "prop_shape_mismatch")]]
+    response_fields = ["head_top", "people", "hands_visible", "text_prominent", "text_seen", *[k for k in keys if k not in ("requirement_mismatch", "prop_mismatch", "prop_shape_mismatch")]]
     if requirements or props:
         response_fields += ["requirement_checks", "prop_checks"]
     prompt += " For any material mismatch, also return corrections: up to three short, concrete corrections for the next drawing. Otherwise return corrections: []."
@@ -123,6 +126,9 @@ def inspect_art(image: Image.Image, vision: VisionClient, references=(), context
         found['seam'] = any(SEAM_CORRECTION.search(c) for c in found['corrections'])
     if isinstance(answer.get("text_prominent"), bool):
         found["text_prominent"] = answer["text_prominent"]
+    seen = answer.get("text_seen")
+    if answer.get("has_text") is True and isinstance(seen, str) and seen.strip():
+        found["text_seen"] = " ".join(seen.split())[:TEXT_SEEN_CHARS]  # the rejection's reason (rejected_art)
     head = answer.get("head_top")
     if isinstance(head, (int, float)) and not isinstance(head, bool) and math.isfinite(head) and 0 <= head <= 1000:
         found["head_top"] = head / 1000
@@ -168,7 +174,7 @@ def _valid_evidence(check, allow_hidden=False):
 
 
 def require_checked(found, require_head=False):
-    flags = [v for k, v in found.items() if k not in ("head_top", "text_prominent", "requirement_checks", "prop_checks", "corrections", "seam", "gloves", "faint_text", "margins_redraw")]
+    flags = [v for k, v in found.items() if k not in ("head_top", "text_prominent", "text_seen", "requirement_checks", "prop_checks", "corrections", "seam", "gloves", "faint_text", "margins_redraw")]
     if any(type(v) is not bool for v in flags) or (require_head and found["head_top"] is None):
         raise ArtCheckError("comic_art_check_unavailable")
     return not any(flags)
