@@ -22,7 +22,7 @@ REVISE_MARK = "REVISE the last attached image"
 REFERENCE_PX = 1536  # the editing model needs the picture, not print resolution: a JPEG this size, not a multi-MB PNG
 # What to ask for, per failed check, said positively (describe the wanted result, not the defect).
 _FIXES = {
-    "has_text": "every surface becomes plain: no letters, words, numbers or glyphs anywhere, no bubbles or caption boxes",
+    "has_text": "every surface becomes plain: no letters, words, numbers, symbols or glyphs anywhere, no bubbles or caption boxes",
     "bad_anatomy": "each person has exactly two arms and two hands with five fingers, every limb attached to its own body",
     "gloves": "both hands are bare skin, without gloves, wraps or straps",
     "seam": "one continuous picture: the dividing line is gone and the scene runs unbroken across it",

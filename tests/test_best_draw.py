@@ -248,7 +248,7 @@ def test_a_revision_that_fixes_the_draw_is_accepted_and_marked():
     art = draw_checked(images, judge({RED: {"has_text": True, "text_prominent": True}}), "scene", [], "2:3", audit=audit)
     assert art.getpixel((0, 0)) == GREEN and len(images.calls) == 2
     assert audit[0].get("revised") is None and audit[1]["revised"] is True and audit[1]["accepted"] is True
-    assert "no letters, words, numbers or glyphs anywhere" in images.calls[1]["prompt"]
+    assert "no letters, words, numbers, symbols or glyphs anywhere" in images.calls[1]["prompt"]
 
 
 def test_only_a_strip_across_the_top_is_cut_off(noise):
