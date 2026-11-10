@@ -1,6 +1,7 @@
 """Vision checks on drawn art: writing the image model painted in, broken human anatomy, and where the hero's head is."""
 
 import math
+import time
 import json
 from io import BytesIO
 from typing import Dict, Optional, Sequence
@@ -34,6 +35,8 @@ INSPECT_PROMPT = (
 )
 REDRAW_NEGATIVE = "third hand, extra arms, extra fingers, duplicate limbs"
 MAX_DRAWS = 3
+CHECK_CALLS = 3
+CHECK_BACKOFF_SECONDS = (3, 10)  # waits before the second and third check call: a provider blip outlasts an instant retry
 
 
 class ArtCheckError(ValueError):
@@ -114,10 +117,17 @@ def inspect_art(image: Image.Image, vision: VisionClient, references=(), context
         response_fields += ["requirement_checks", "prop_checks"]
     prompt += " For any material mismatch, also return corrections: up to three short, concrete corrections for the next drawing. Otherwise return corrections: []."
     prompt += " Return JSON with exactly these fields: " + ", ".join([*response_fields, 'corrections']) + "."
-    try:
-        ask = getattr(vision, "ask_art_json", vision.ask_json)
-        answer = ask(prompt, [small, *references] if references else small)
-    except Exception:
+    ask = getattr(vision, "ask_art_json", vision.ask_json)
+    answer = None
+    for call in range(CHECK_CALLS):  # a failed call (timeout, dropped connection, bad JSON) is retried before the check is unavailable
+        if call:
+            time.sleep(CHECK_BACKOFF_SECONDS[call - 1])
+        try:
+            answer = ask(prompt, [small, *references] if references else small)
+            break
+        except Exception:
+            continue
+    if answer is None:
         return found
     if not isinstance(answer, dict):
         return found

@@ -56,3 +56,10 @@ class FakeVision:
 @pytest.fixture
 def noise():
     return lambda size=(400, 600): Image.effect_noise(size, 80).convert("RGB")
+
+
+@pytest.fixture(autouse=True)
+def no_check_backoff(monkeypatch):
+    """A failed art-check call waits before its retry (art_check.CHECK_BACKOFF_SECONDS); tests never really sleep."""
+    import book_comic.art_check as art_check
+    monkeypatch.setattr(art_check.time, "sleep", lambda seconds: None)
