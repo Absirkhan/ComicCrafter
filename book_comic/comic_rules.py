@@ -97,8 +97,10 @@ SINGLE_IMAGE_RULE = (
     "from the top edge to the bottom edge, behind and around the figure, one moment seen by one camera, filling the whole "
     "canvas; never stack two pictures, bands or strips. The art style names how lines, colour and texture are rendered, "
     "never a physical object: the picture is the scene itself, with no drawn paper, canvas, print, page edges, mat, frame "
-    "or blank margins."
+    "or blank margins. No inset or picture-in-picture panel, no frame inside the picture, and no empty caption box, "
+    "title bar or blank band across it."
 )
+
 SEAM_CORRECTION = re.compile(r"\b(?:seam|divider|dividing|split[- ]screen|panel (?:line|border)|border line|"
                              r"two (?:panels|pictures|images)|stacked|strip)\b", re.I)
 
