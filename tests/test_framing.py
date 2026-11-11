@@ -24,13 +24,13 @@ CLEAN = {"has_text": False, "bad_anatomy": False, "identity_mismatch": False, "d
 def test_each_shot_label_opens_the_prompt_with_its_crop(scene, opening, phrase):
     prompt = panel_prompt(CAST, {"scene": scene}, "Hero: teal blazer")
     assert prompt.startswith(opening)
-    assert phrase in prompt.split("Comic book panel.")[0]
+    assert phrase in prompt.split("One full-bleed comic illustration.")[0]
 
 
 def test_no_label_means_no_crop_but_the_single_image_rule_stays():
     assert shot_framing("Hero argues with the clerk.") == ""
     prompt = panel_prompt(CAST, {"scene": "Hero argues with the clerk."}, "Hero: teal blazer")
-    assert prompt.startswith("One single continuous image: no panel borders, seams, split-screen")
+    assert prompt.startswith("One single continuous image: one moment seen by one camera, a full-bleed illustration")
 
 
 @pytest.mark.parametrize("scene", [
@@ -172,7 +172,7 @@ def test_state_changes_draw_the_end_state_and_hidden_props_are_never_drawn():
 def test_the_art_style_is_never_drawn_as_paper_frame_or_margins():
     prompt = panel_prompt({"style": "woodcut comic, earthy inks on cream paper", "characters": []},
                           {"scene": "Wide shot: Hero in a modest apartment."}, "Hero: teal blazer")
-    assert "with no drawn paper, canvas, print, page edges, mat, frame or blank margins" in prompt
+    assert "not paper, a print, a page or a framed picture, with no blank margins" in prompt
 
 
 def test_a_hand_detail_carries_the_outfit_so_no_gloves_or_other_sleeve_are_invented():

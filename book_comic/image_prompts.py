@@ -12,8 +12,7 @@ from book_comic.lettering_space import lettering_space
 from book_comic.margins import drawable_style
 
 NO_TEXT = (
-    "a single full-bleed illustration filling the whole canvas edge to edge: no border, no frame, "
-    "no panel lines, no empty lettering containers or placeholder rectangles, no text, no letters, no speech bubbles, "
+    "a single full-bleed illustration filling the whole canvas edge to edge: no text, no letters, no speech bubbles, "
     "no captions, no watermark, no sound-effect lettering, no pseudo-lettering or empty lettering containers"
 )
 
@@ -61,7 +60,7 @@ def describe_references(roles: Sequence[str]) -> str:
         "age cues, head-to-body proportions, hair, facial hair and exact garment construction. "
         "The specified age group controls depicted age; explicit appearance details override photo hair or accessories. "
         "Use the photo for unspecified details and retain recognizable facial identity within that age group. "
-        "Previous panels establish the environment and latest prop state unless the current scene explicitly changes them; "
+        "The earlier pictures of this story establish the environment and latest prop state unless the current scene explicitly changes them; "
         "they do not control camera framing. "
         "The current scene controls pose, expression, shot distance and camera angle; do not copy a prior composition. "
         "Keep recurring companions and objects recognizable by their fixed geometry and construction. "
@@ -69,11 +68,11 @@ def describe_references(roles: Sequence[str]) -> str:
 
 
 SPLASH = (
-    "Full-page splash illustration: this one image fills an entire tall portrait comic page. "
+    "Full-page splash illustration: this one image fills the entire tall portrait canvas as one picture. "
     "Give it a wide, establishing, dramatic composition with depth, scale and a strong focal point; "
     "when the scene names a closer shot, keep that shot and stage it dramatically. "
-    "Leave calm continuous scenery (sky, ceiling, ground or water) across the top or bottom fifth of the canvas, "
-    "free of faces, important hands and focal props, as room for one later caption; never a blank strip or box.\n"
+    "Let the scene's own sky, ceiling, ground or water fill the top or bottom fifth of the canvas as open, low-detail "
+    "scenery, free of faces, important hands and focal props.\n"
 )
 
 
@@ -115,7 +114,7 @@ def panel_prompt(cast: Dict, panel: Dict, people: str, roles: Sequence[str] = ()
                   "description includes gloves; no gloves, straps, wraps, bracelets, rings or a different sleeve. "
                   "Preserve its skin tone and age from the references; do not draw the whole character.")
     calm_area = SPLASH if splash else lettering_space(panel, requirements)
-    kind = "Full-page comic splash panel" if splash else "Comic book panel"
+    kind = "One full-page, full-bleed comic illustration" if splash else "One full-bleed comic illustration"
     previous = ""
     if "previous" in roles:
         previous = (

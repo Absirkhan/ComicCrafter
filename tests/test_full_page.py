@@ -57,7 +57,7 @@ def test_a_splash_page_fills_the_print_page_with_one_checked_lettered_panel(tmp_
     assert panel["aspect_ratio"] == closest_aspect_ratio(*content) == "2:3"  # portrait, like the page
     assert sheet["references"] == ["data:photo"] and panel["references"] == ["data:photo", r.character_sheet()]
     assert "Full-page splash illustration" in panel["prompt"] and "establishing" in panel["prompt"]
-    assert "top or bottom fifth" in panel["prompt"] and "Comic book panel." not in panel["prompt"]
+    assert "top or bottom fifth" in panel["prompt"] and "One full-bleed comic illustration." not in panel["prompt"]
     art = tmp_path / "art_page_1.png"
     assert Image.open(art).size == content  # the next page's chain reference and the cover's panel input
     assert not (tmp_path / "rejected").exists()

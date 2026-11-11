@@ -1,4 +1,4 @@
-"""The 2026-11-10 production review: no inset panels or caption boxes, and a failed check call is retried with backoff."""
+"""The 2026-11-10 production review: one full-bleed picture, and a failed check call is retried with backoff."""
 import pytest
 from PIL import Image
 
@@ -31,9 +31,10 @@ def failing(times):
     return answer
 
 
-def test_every_panel_forbids_inset_panels_and_empty_caption_boxes():
-    assert "inset or picture-in-picture panel" in SINGLE_IMAGE_RULE
-    assert "empty caption box" in SINGLE_IMAGE_RULE
+def test_every_panel_asks_for_one_full_bleed_picture_without_naming_layouts():
+    assert "full-bleed illustration whose setting runs unbroken to all four edges" in SINGLE_IMAGE_RULE
+    for primer in ("panel border", "inset", "caption box", "split-screen"):  # naming them invites them (2026-11-10)
+        assert primer not in SINGLE_IMAGE_RULE
     prompt = panel_prompt({"style": "comic", "characters": []}, {"scene": "Wide shot: Hero on a bridge."}, "Hero: teal coat")
     assert SINGLE_IMAGE_RULE in prompt
 
