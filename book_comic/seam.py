@@ -1,4 +1,5 @@
-"""A seam: a thin flat full-width line where the image model stacked a second strip over the scene.
+"""A seam: a thin flat full-width line where the image model stacked a second strip over the scene, and an edge band:
+a blank light strip along one edge closed off by a ruled line (an empty caption strip or a page margin).
 
 find_seam keeps the cover's contract (a strip across the top; the row below it). cut_seam, for panels, cuts the
 same kind of strip: a band of at most STRIP of the height across the top. A flat line anywhere lower is left alone,
@@ -8,7 +9,7 @@ marks a cut draw ("seam_cut"), and the vision check sees the cut art.
 """
 from typing import List, Optional, Tuple
 
-from PIL import Image, ImageOps
+from PIL import Image, ImageOps, ImageStat
 
 STRIP = 0.15  # a stacked strip is a band across the top; fitting the rest back to size crops at most this share of the width
 THIN = 0.02  # a seam is at most this share of the height; thicker flat bands are sky, floor or a wall
@@ -54,10 +55,66 @@ def seam_band(image: Image.Image) -> Optional[Tuple[int, int]]:
     return next(((start, end) for start, end in runs if end <= h * STRIP), None)
 
 
-def cut_seam(art: Image.Image, size: Tuple[int, int]) -> Optional[Image.Image]:
-    """The art with the strip above a top seam cut off and fitted back to size, or None when there is no such seam."""
-    band = seam_band(art)
-    if band is None:
+# An edge band (2026-11-10 review, pages 8 and 12): an empty caption strip or page margin the model drew along one
+# edge, closed off by a ruled border line. Light, plain and at most STRIP deep; the dark line after it is what tells
+# it from a plain sky or floor, which have no ruled line, so those are never cut.
+BAND_FLAT = 7.0      # luminance spread of a blank line (a little paper grain)
+BAND_TONE = 165.0    # a blank band is light (white, cream, light grey)
+BAND_SAME = 18.0     # every line of the band has about the edge line's tone
+INK_DARK = 70.0      # a border line is at least this much darker than the band
+INK_TONE = 110.0     # and dark in itself: ink, not mid-tone scenery smoothed flat by the quarter-size scan
+INK_FLAT = 10.0      # and as plain as the band (scenery rows, even smoothed, vary more)
+BAND_MIN = 0.01      # a band thinner than this share of the side is a drawn edge, not a strip
+
+
+def _line(gray: Image.Image, axis: str, i: int) -> Tuple[float, float]:
+    box = (i, 0, i + 1, gray.height) if axis == "x" else (0, i, gray.width, i + 1)
+    stat = ImageStat.Stat(gray.crop(box))
+    return stat.mean[0], stat.stddev[0]
+
+
+def _edge_band(gray: Image.Image, axis: str, from_end: bool) -> int:
+    """Lines to cut from one edge: a blank light band plus the ruled dark line closing it off, or 0."""
+    length = gray.width if axis == "x" else gray.height
+    order = list(range(length - 1, -1, -1) if from_end else range(length))
+    tone, band = None, 0
+    for i in order[: int(length * STRIP) + 1]:
+        mean, spread = _line(gray, axis, i)
+        if spread > BAND_FLAT or mean < BAND_TONE or (tone is not None and abs(mean - tone) > BAND_SAME):
+            break
+        tone, band = tone if tone is not None else mean, band + 1
+    if tone is None or band < max(1, int(length * BAND_MIN)) or band > length * STRIP:
+        return 0
+    ink = 0
+    for i in order[band: band + max(1, int(length * THIN))]:
+        mean, spread = _line(gray, axis, i)
+        if spread > INK_FLAT or mean > INK_TONE or tone - mean < INK_DARK:
+            break
+        ink += 1
+    return band + ink if ink else 0
+
+
+def edge_band_box(art: Image.Image) -> Optional[Tuple[int, int, int, int]]:
+    """The picture's box (left, top, right, bottom) without blank ruled bands along its edges, or None when there are none."""
+    gray = art.convert("L").resize((max(1, art.width // 4), max(1, art.height // 4)))
+    cut = [_edge_band(gray, "x", False), _edge_band(gray, "y", False), _edge_band(gray, "x", True), _edge_band(gray, "y", True)]
+    if not any(cut):
         return None
-    cut = ImageOps.fit(art.crop((0, band[1], art.width, art.height)), size, Image.Resampling.LANCZOS, centering=(0.5, 0.0))
+    sx, sy = art.width / gray.width, art.height / gray.height
+    left, top, right, bottom = cut[0] * sx, cut[1] * sy, art.width - cut[2] * sx, art.height - cut[3] * sy
+    return round(left), round(top), round(right), round(bottom)
+
+
+def cut_seam(art: Image.Image, size: Tuple[int, int]) -> Optional[Image.Image]:
+    """The art with a stacked top strip or blank ruled edge bands cut off and fitted back to size, or None when
+    there is nothing to cut. The vision check still judges the cut art."""
+    box = edge_band_box(art)
+    if box is not None:
+        art = art.crop(box)
+    band = seam_band(art)
+    if band is None and box is None:
+        return None
+    if band is not None:
+        art = art.crop((0, band[1], art.width, art.height))
+    cut = ImageOps.fit(art, size, Image.Resampling.LANCZOS, centering=(0.5, 0.0))
     return None if seam_band(cut) is not None else cut  # a second stacked strip: nothing to gain by cutting, the check decides

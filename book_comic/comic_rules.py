@@ -53,7 +53,7 @@ PANEL_RULES = (
     "paper-cutout or painterly style. "
     "Colour mood: use lighting and value relationships within the selected style's palette. A monochrome style "
     "stays monochrome; do not add colours just to signal an emotion. "
-    "Consistency: each character's hairstyle, outfit and accessories are identical in every panel, recognisable from "
+    "Consistency: each character's hairstyle, outfit and accessories are identical in every picture, recognisable from "
     "any angle or distance. Keep costume construction fixed; an established handheld accessory may be held, "
     "worn or put down when the approved scene explicitly changes its position. "
 )
@@ -74,7 +74,7 @@ NO_TEXT_RULE = (
 # Every story panel: the model drifts the hero into tactical or military gear the sheet does not have
 OUTFIT_LOCK = (
     "Outfit lock: every character wears exactly the outfit described above and shown on the character sheet, the same "
-    "garments, colours and footwear in every panel, with bare hands and a plain civilian look. Handwear and gear appear "
+    "garments, colours and footwear in every picture, with bare hands and a plain civilian look. Handwear and gear appear "
     "only when named: no tactical, armoured or fingerless gloves, body armour, plate carriers, tactical vests, holsters, "
     "utility belts, harnesses or military uniforms unless the character's description, a listed prop or the scene names them. "
 )
@@ -92,13 +92,14 @@ def bare_hands(*texts: str) -> str:
 
 
 # Every story panel: the model sometimes splits one panel into two pictures with a seam line
+# Phrased as what to draw: naming "panel borders", "inset panels" or "caption boxes", even to forbid them, invites
+# the image model to draw a comic page (2026-11-10 review: 3 of 12 rejections on a paid comic were borders or bands).
 SINGLE_IMAGE_RULE = (
-    "One single continuous image: no panel borders, seams, split-screen or dividing lines. The setting runs unbroken "
-    "from the top edge to the bottom edge, behind and around the figure, one moment seen by one camera, filling the whole "
-    "canvas; never stack two pictures, bands or strips. The art style names how lines, colour and texture are rendered, "
-    "never a physical object: the picture is the scene itself, with no drawn paper, canvas, print, page edges, mat, frame "
-    "or blank margins. No inset or picture-in-picture panel, no frame inside the picture, and no empty caption box, "
-    "title bar or blank band across it."
+    "One single continuous image: one moment seen by one camera, a full-bleed illustration whose setting runs "
+    "unbroken to all four edges of the canvas, behind and around the figure; never stack two pictures, bands or strips. "
+    "The art style names how lines, colour and texture are rendered, never a physical object: the picture is the scene "
+    "itself, not paper, a print, a page or a framed picture, with no blank margins. Nothing is drawn over the scene: "
+    "no ruled lines, boxes or frames across it."
 )
 
 SEAM_CORRECTION = re.compile(r"\b(?:seam|divider|dividing|split[- ]screen|panel (?:line|border)|border line|"

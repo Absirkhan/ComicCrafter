@@ -95,7 +95,7 @@ def test_a_seam_the_checker_reports_is_revised_into_one_continuous_picture():
     assert revision.startswith("REVISE the last attached image") and "the dividing line is gone" in revision
     assert "Remove the horizontal panel divider line" in revision and SINGLE_IMAGE_RULE not in images.calls[0]["prompt"]
     assert art.info["comic_verification"]["seam"] is False  # bookkeeping, never a rejection flag
-    assert "never stack two pictures, bands or strips" in SINGLE_IMAGE_RULE
+    assert "never stack two pictures, bands or strips" in SINGLE_IMAGE_RULE  # still said once
     assert prompt_for("Wide shot: Hero waits.").count(SINGLE_IMAGE_RULE) == 2  # opening block and closing line
 
 
