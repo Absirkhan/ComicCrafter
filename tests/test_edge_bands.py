@@ -68,3 +68,26 @@ def test_a_light_sky_over_smooth_mid_tone_scenery_is_never_cut():
     art = Image.new("RGB", (400, 600), (128, 120, 110))  # a plain wall or street, flat after smoothing
     art.paste(SKY, (0, 0, 400, 40))
     assert edge_band_box(art) is None
+
+
+def test_a_blank_box_just_below_the_top_edge_is_cut_with_the_sliver_above_it(noise):
+    """2026-11-11 splash: a caption box drawn under a sliver of sky, not touching the edge."""
+    art = noise((400, 600))
+    art.paste((205, 225, 235), (0, 20, 400, 70))  # the box, 20 px below the top
+    _, top, _, _ = edge_band_box(art)
+    assert 68 <= top <= 76
+    assert cut_seam(art, (400, 600)).size == (400, 600)
+
+
+def test_a_soft_pale_sky_band_below_the_top_edge_is_not_a_box():
+    art = Image.new("RGB", (400, 600), (90, 90, 100))
+    for y in range(20, 70):  # fades in and out: no hard edges
+        tone = 200 - abs(y - 45) * 2
+        art.paste((tone, tone, tone + 10), (0, y, 400, y + 1))
+    assert edge_band_box(art) is None
+
+
+def test_a_blank_box_lower_down_is_left_to_the_check(noise):
+    art = noise((400, 600))
+    art.paste(WHITE, (0, 300, 400, 350))  # mid-picture: cutting there would lose the subject
+    assert edge_band_box(art) is None

@@ -94,10 +94,39 @@ def _edge_band(gray: Image.Image, axis: str, from_end: bool) -> int:
     return band + ink if ink else 0
 
 
+LEAD = 0.06   # a caption box may sit this far below the top edge, with a sliver of sky above it (2026-11-11 splash)
+EDGE_JUMP = 40.0  # the box's top and bottom edges are hard: the tone jumps at least this much across each
+
+
+def _detached_top_band(gray: Image.Image) -> int:
+    """Rows to cut from the top for a blank light box that starts just below the edge, or 0.
+
+    Top only: what is cut is at most STRIP of sky, so a pale flat cloud band, if ever taken for a box, costs nothing.
+    A box has hard edges on both sides; a pale sky fades into the clouds around it."""
+    h = gray.height
+    lines = [_line(gray, "y", i) for i in range(int(h * STRIP) + 1)]
+    for start in range(1, int(h * LEAD) + 1):
+        mean, spread = lines[start]
+        above = max(abs(mean - lines[start - 1][0]), abs(mean - lines[max(0, start - 2)][0]))
+        if spread > BAND_FLAT or mean < BAND_TONE or above < EDGE_JUMP:
+            continue
+        end = start
+        while end < len(lines) and lines[end][1] <= BAND_FLAT and abs(lines[end][0] - mean) <= BAND_SAME:
+            end += 1
+        if end - start < max(2, int(h * 0.03)) or end + 1 >= len(lines):
+            continue
+        tone = sum(m for m, _ in lines[start:end]) / (end - start)
+        # The quarter-size scan blurs an edge over about one row, so the row past it counts too.
+        if max(abs(lines[end][0] - tone), abs(lines[end + 1][0] - tone)) >= EDGE_JUMP:
+            return end
+    return 0
+
+
 def edge_band_box(art: Image.Image) -> Optional[Tuple[int, int, int, int]]:
     """The picture's box (left, top, right, bottom) without blank ruled bands along its edges, or None when there are none."""
     gray = art.convert("L").resize((max(1, art.width // 4), max(1, art.height // 4)))
     cut = [_edge_band(gray, "x", False), _edge_band(gray, "y", False), _edge_band(gray, "x", True), _edge_band(gray, "y", True)]
+    cut[1] = cut[1] or _detached_top_band(gray)
     if not any(cut):
         return None
     sx, sy = art.width / gray.width, art.height / gray.height

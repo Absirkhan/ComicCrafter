@@ -71,8 +71,8 @@ SPLASH = (
     "Full-page splash illustration: this one image fills the entire tall portrait canvas as one picture. "
     "Give it a wide, establishing, dramatic composition with depth, scale and a strong focal point; "
     "when the scene names a closer shot, keep that shot and stage it dramatically. "
-    "Leave calm continuous scenery (sky, ceiling, ground or water) across the top or bottom fifth of the canvas, "
-    "free of faces, important hands and focal props, as room for one later caption; never a blank strip or box.\n"
+    "Let the scene's own sky, ceiling, ground or water fill the top or bottom fifth of the canvas as open, low-detail "
+    "scenery, free of faces, important hands and focal props.\n"
 )
 
 
