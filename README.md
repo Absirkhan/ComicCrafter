@@ -199,9 +199,11 @@ Queue a job from Python with `generate_book_comic.delay("book.pdf", first_chapte
   model painted text or an extra hand into it; the character sheet is checked the same way. Image and vision costs are counted in `cost_usd`.
 - **Cover**: `cover.png` is drawn from `cast.json`'s `cover`, using page one's panels as a reference
   strip. A seam (a second strip stacked on top) is detected and cropped off. Art whose head sits too
-  high for the title gets one more try, and the better of the two attempts is kept. The cover is
-  lettered with a shade, a one-line shadowed title, a starring line and a footer. It is placed first
-  in the PDF.
+  high for the title gets its title block at the bottom instead; a head in the printers' top margin
+  (above 8.5% of the height) is drawn again, and the last draw is kept if none clears it. The cover is
+  lettered with a shade, a one-line shadowed title, a starring line and a footer, all inside the
+  printers' text margin on the printed cover (`cover_lettering.SAFE_TOP`, `SAFE_BOTTOM`, `SAFE_WIDTH`:
+  12.7 mm inside the trim after Lulu's and BookPod's cover crops). It is placed first in the PDF.
 - **Full-page splash**: `PageRenderer.render_page` takes 3 panels (a vertical strip) or 1 panel (a
   full-page splash, `LayoutType.FULL_PAGE`: one portrait image in the strip's outer frame, with the same
   references and art check, a splash prompt, and at most one caption and one bubble lettered at a strip

@@ -1,4 +1,4 @@
-"""Cover lettering stays inside the printers' margin on the printed cover, with fake clients.
+"""Cover lettering and the hero's head stay inside the printers' margin on the printed cover, with fake clients.
 
 The printed cover (the Books repo's comicPrint `coverFront`) scales the 2063 x 3150 px art to cover the front
 panel and its bleed, so the art's edges are cut away. PRINTERS repeats both printers' cuts.
@@ -8,8 +8,12 @@ import numpy as np
 import pytest
 from PIL import Image
 
+from book_comic import cover as cover_module
 from book_comic.back_cover_lettering import letter_back_cover
+from book_comic.cover import HEAD_SAFE_MIN, HEADROOM_FIX, render_cover
 from book_comic.cover_lettering import letter_cover
+from book_comic.revise import REVISE_MARK
+from conftest import FakeImages, FakeVision
 
 W, H = 2063, 3150
 MARGIN_MM = 12.7 + 1  # Lulu's text margin inside the trim, and 1 mm to spare
@@ -21,6 +25,8 @@ LONG = {"title": "The Extraordinarily Long Birthday Adventure of Grandpa",
         "starring": "Starring Maximilian Alexander the Third of the Northern Lighthouse Islands",  # wraps to two lines
         "footer": "For my dearest grandfather, with all the love in the world, from all of us at home"}  # two lines
 HEBREW = {"title": "המצאת יום ההולדת הגדולה והמופלאה של סבא", "starring": "בכיכוב דנה", "footer": "בשביל סבא"}
+CAST = {"style": "comic", "characters": [{"name_en": "Dana", "look": "red coat"}]}
+CLEAN = {"has_text": False, "bad_anatomy": False, "identity_mismatch": False, "design_mismatch": False, "scene_mismatch": False}
 
 
 def lettered_lines(image):
@@ -78,3 +84,49 @@ def test_the_back_cover_footer_prints_inside_the_margin():
         for printer in PRINTERS.values():
             mm = inside_trim_mm(line, printer)
             assert mm["bottom"] >= MARGIN_MM and mm["side"] >= MARGIN_MM
+
+
+def test_the_head_limit_keeps_the_hair_inside_both_printers_top_margin():
+    for printer in PRINTERS.values():
+        assert inside_trim_mm((round(H * HEAD_SAFE_MIN), H, 0, W), printer)["top"] >= 13
+
+
+def render(tmp_path, monkeypatch, heads, audit=None, rejected=None):
+    """render_cover over fake draws whose check reports `heads` in turn; returns (image calls, title_at_bottom)."""
+    answers = iter(heads)
+    bottoms = []
+    monkeypatch.setattr(cover_module, "letter_cover", lambda art, c, f, title_at_bottom: bottoms.append(title_at_bottom) or art)
+    images = FakeImages([Image.new("RGB", (400, 600), c) for c in ("red", "green", "blue")])
+    render_cover(CAST, {"scene": "Dana on the cliff", **SHORT}, (400, 600), tmp_path / "cover.png", images,
+                 FakeVision(lambda p, i: {**CLEAN, "head_top": next(answers) * 1000}), audit=audit,
+                 on_reject=(lambda *a, **k: rejected.append(a)) if rejected is not None else None)
+    assert (tmp_path / "cover.png").exists()
+    return images.calls, bottoms
+
+
+def test_the_cover_brief_asks_for_setting_above_the_head(tmp_path, monkeypatch):
+    calls, _ = render(tmp_path, monkeypatch, [0.3])
+    assert len(calls) == 1
+    assert "at least one eighth of the canvas height of that setting shows above the head" in calls[0]["prompt"]
+    assert "title" not in calls[0]["prompt"].lower()  # naming it makes the model paint lettering
+
+
+def test_a_head_in_the_top_margin_is_drawn_again_with_a_request_for_headroom(tmp_path, monkeypatch):
+    audit, rejected = [], []
+    calls, bottoms = render(tmp_path, monkeypatch, [0.048, 0.25], audit, rejected)  # BOOKS-45's hair began 4.8% down
+    assert len(calls) == 2 and bottoms == [False]
+    assert calls[1]["prompt"].startswith(REVISE_MARK) and HEADROOM_FIX in calls[1]["prompt"]
+    assert [(r["accepted"], r.get("head_in_margin")) for r in audit] == [(False, True), (True, None)]
+    assert rejected == []  # sound art: not recorded as a vision rejection
+
+
+def test_a_head_just_below_the_margin_is_kept_without_another_draw(tmp_path, monkeypatch):
+    calls, bottoms = render(tmp_path, monkeypatch, [0.09])
+    assert len(calls) == 1 and bottoms == [True]  # under 20%: the title still moves to the bottom
+
+
+def test_a_head_in_the_margin_on_every_draw_never_loses_the_cover(tmp_path, monkeypatch):
+    audit = []
+    calls, bottoms = render(tmp_path, monkeypatch, [0.04, 0.05, 0.06], audit)
+    assert len(calls) == 3 and bottoms == [True]
+    assert [r.get("fallback") for r in audit] == [None, None, True]  # the last draw is kept

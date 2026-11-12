@@ -181,6 +181,9 @@ def cover_prompt(cast: Dict, cover: Dict, roles: Sequence[str] = ()) -> str:
         "in the frame without forcing a standing pose: follow the scene's action. Aim for the head about one third "
         "of the way down the canvas when that pose permits, with more of the setting "
         "(its sky, ceiling or upper wall) above it, and let the bottom edge fade slightly darker. "
+        # The printed cover loses up to 8 mm at the top and keeps a 12.7 mm margin there (cover.HEAD_SAFE_MIN).
+        "In every pose the top of the hair or hat stays well below the top edge, never touching or nearing it: "
+        "at least one eighth of the canvas height of that setting shows above the head. "
         f"{acceptance_prompt(cover_requirements(scene, cover.get('requirements', [])), cast.get('prop_anchors'))}{props_rule(cast)}{ANATOMY_RULE}{NO_TEXT_RULE}"
     )
 

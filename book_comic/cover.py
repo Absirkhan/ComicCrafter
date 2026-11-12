@@ -29,6 +29,12 @@ logger = logging.getLogger(__name__)
 # The one-line title and the starring line end near 14% of the height; a head starting above 20%
 # would crowd them (measured on real covers: 0.16 crowds, 0.19-0.24 leaves clear space).
 HEAD_TOP_MIN = 0.2
+# A head above 8.5% of the height prints in the printers' top margin (12.7 mm inside the trim): BookPod's B5 cuts
+# 7.8 mm of the 256.8 mm art above the trim (20.8 mm, 8.1%), Lulu's comic 3.2 mm of 266.7 mm (6.1%). Such a draw is
+# drawn again while draws remain; it is never a reason to lose the cover (the last such draw is kept).
+HEAD_SAFE_MIN = 0.085
+HEADROOM_FIX = ("the camera is pulled back a little so the main character sits lower in the frame, with a clear stretch "
+                "of the setting (its sky, ceiling or upper wall), at least one eighth of the canvas height, above the top of the hair or hat")
 # Three draws, then the least-bad one without a hard defect (as for panels): with two draws and no fallback, a cover
 # lost the whole preview (2 of 6 test pages on 2026-11-04, a duplicate prop or a seam).
 ATTEMPTS = 3
@@ -70,7 +76,8 @@ def render_cover(
     """Draw and letter the cover; at most ATTEMPTS image calls.
 
     Remove a seam locally, then accept only inspected art with matching identity, designs and scene.
-    Unchecked or persistently rejected art raises. A high head moves lettering instead of causing a redraw.
+    Unchecked or persistently rejected art raises. A high head moves lettering instead of causing a redraw;
+    only a head in the printers' top margin (HEAD_SAFE_MIN) is drawn again, and never fails the cover.
 
     Args:
         cast: Character sheet (style, characters, optional props)
@@ -102,7 +109,8 @@ def render_cover(
         # Draw 2 revises a rejected draw 1 (book_comic.revise); a skipped draw (margins, seam) leaves nothing to revise.
         revised = draw == 2 and bool(rejected)
         if revised:
-            art = request_art(images, revision_prompt(prompt, rejected[-1][1], (), requirements, prop_anchors), [*references, data_url(rejected[-1][0])], closest_aspect_ratio(*size))
+            headroom = (HEADROOM_FIX,) if rejected[-1][2].get("head_in_margin") else ()
+            art = request_art(images, revision_prompt(prompt, rejected[-1][1], headroom, requirements, prop_anchors), [*references, data_url(rejected[-1][0])], closest_aspect_ratio(*size))
         else:
             art = request_art(images, prompt, references, closest_aspect_ratio(*size))
         trimmed, margins = trim_margins(art, size[0] / size[1])
@@ -128,11 +136,15 @@ def render_cover(
         except ArtCheckError:
             report_rejected(on_reject, draw, art, found, True, prompt, requirements)
             raise
-        report["accepted"] = clean
-        if clean:
+        in_margin = clean and found["head_top"] < HEAD_SAFE_MIN
+        report["accepted"] = clean and not in_margin
+        if clean and not in_margin:
             head = found["head_top"]
             break  # a high head is handled by local title placement, without another image call
-        report_rejected(on_reject, draw, art, found, False, prompt, requirements)
+        if in_margin:  # sound art whose head would print in the top margin: not a vision rejection, so not reported as one
+            report["head_in_margin"] = True
+        else:
+            report_rejected(on_reject, draw, art, found, False, prompt, requirements)
         rejected.append((art, found, report))
     else:
         best = pick_fallback([(a, f) for a, f, _ in rejected], requirements)
