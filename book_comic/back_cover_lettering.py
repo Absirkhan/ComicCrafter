@@ -4,11 +4,12 @@ The art is drawn with nobody in it and a calm upper half (image_prompts.back_cov
 white type readable on any art. Hebrew is set right to left. Type shrinks until the whole text fits the panel.
 """
 
+import math
 from typing import Dict, Optional, Tuple
 
 from PIL import Image, ImageDraw, ImageFont
 
-from book_comic.cover_lettering import CoverFonts, _shadowed_text, resolve_font
+from book_comic.cover_lettering import SAFE_BOTTOM, SAFE_WIDTH, CoverFonts, _shadowed_text, resolve_font
 from layout.lettering import _wrap, is_rtl
 
 PANEL_TOP = 0.2      # the panel starts a fifth of the way down
@@ -96,6 +97,7 @@ def letter_back_cover(image: Image.Image, back: Dict, fonts: Optional[CoverFonts
                             fill=(240, 240, 240, 255), **style)
     if back.get("footer"):
         font = ImageFont.truetype(str(fonts.footer), max(14, int(h * 0.022)))
-        _shadowed_text(page, back["footer"], font, int(w * 0.8), h - max(12, h // 18) // 2, align_bottom=True,
+        # Inside the printers' text margin, as the front cover's lettering (cover_lettering.SAFE_BOTTOM).
+        _shadowed_text(page, back["footer"], font, int(w * SAFE_WIDTH), h - math.ceil(h * SAFE_BOTTOM), align_bottom=True,
                        blur=max(3, h // 400))
     return page.convert("RGB")
