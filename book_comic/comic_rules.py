@@ -37,6 +37,13 @@ ANATOMY_RULE = (
     "This describes the whole person, not what must be visible: respect the requested crop and never add "
     "occluded hands, limbs or a head just to show the complete body. "
 )
+# Wherever the whole figure is asked for (wide shots, the landscape canvas line, a redraw after a squashed figure): a
+# draw told to fit head to feet into a short, wide panel shortened the legs instead (2026-11-12, page 5 panel 1).
+PROPORTION_RULE = (
+    "Natural proportions: the figure keeps the natural proportions of its age, with the legs about half the body "
+    "height. In a short, wide frame draw the figure smaller in the frame, or crop it at the knees, rather than "
+    "shortening it to fit: never compress or shorten the legs or the torso to fit the frame."
+)
 
 # Image rules for every story panel. Never mention "title" or "caption text" here: naming lettering
 # makes the image model paint its own.
@@ -61,13 +68,15 @@ PANEL_RULES = (
 # "a small white card ... with a black mirrored symbol" got an aleph-like glyph and was rejected for has_text.
 WORDLESS_OVERRIDE = (
     "Whatever the scene says, nothing in the picture carries letters, numbers, symbols, glyphs or written marks; "
-    "any sign, card, label, note, map, book page or screen is blank or plain shapes."
+    "any sign, card, label, note, book page or screen is blank or plain shapes; a map, chart or diagram is drawn as "
+    "colour fields, lines and shapes with no words, never blank."
 )
 NO_TEXT_RULE = (
     f"Wordless picture: {WORDLESS_OVERRIDE} Walls, posters, murals, graffiti, billboards "
     "and plaques are plain paint, texture or simple pictures. Neon signs, shop signs, screens and holograms are abstract "
-    "glowing shapes, stripes or plain geometric forms; instrument faces use geometric ticks and pointers only; maps, pages, "
-    "cards, labels and documents show plain colour fields and lines. Speech and captions are added later by the letterer, so the "
+    "glowing shapes, stripes or plain geometric forms; instrument faces use geometric ticks and pointers only; maps, charts "
+    "and diagrams show plain colour fields, lines and shapes, never a blank sheet; pages, cards, labels and documents show "
+    "plain colour fields and lines. Speech and captions are added later by the letterer, so the "
     "picture carries no lettering of its own. Absolutely no writing anywhere in the image: never letters, words, numbers, "
     "symbols or letter-like glyphs, and no speech bubbles, caption boxes or empty white placeholder rectangles."
 )
