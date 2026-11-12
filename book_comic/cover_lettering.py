@@ -1,5 +1,6 @@
 """Cover lettering: shaded art, a one-line shadowed title, a starring line and a footer. No boxes."""
 
+import math
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, Optional, Union
@@ -11,6 +12,15 @@ from layout.lettering import FONTS_DIR, _wrap, is_rtl
 TITLE_FONT = FONTS_DIR / "Rubik-Black.ttf"
 STARRING_FONT = FONTS_DIR / "Assistant-SemiBold.ttf"
 FOOTER_FONT = FONTS_DIR / "Assistant-Regular.ttf"
+
+# Where lettering may sit, as shares of the cover art, so every word prints inside the printers' text margin
+# (12.7 mm inside the trim, Lulu's, plus 1 mm to spare). The printed cover scales the art to cover the front
+# panel and its bleed, so the art's edges are cut away. Lulu's comic (174.7 x 266.7 mm of art): the trim is
+# 3.2 mm inside the art top and bottom and 4.8 mm at the outer side. BookPod's B5 (168.2 x 256.8 mm of art):
+# 7.8 mm cut at the top, 14 mm at the bottom, 3.2 mm at the outer side.
+SAFE_BOTTOM = 0.11  # lettering ends 11% above the art's bottom: 14.2 mm inside BookPod's trim, 26.2 mm inside Lulu's
+SAFE_TOP = 0.064  # the title starts 6.4% below the art's top: 13.9 mm inside Lulu's trim, 8.6 mm inside BookPod's (its own text line is 5 mm)
+SAFE_WIDTH = 0.78  # lettering is centred on 78% of the width: 14.4 mm inside Lulu's side trims, 15.3 mm inside BookPod's
 
 
 @dataclass
@@ -97,31 +107,33 @@ def letter_cover(image: Image.Image, cover: Dict, fonts: Optional[CoverFonts] = 
         fonts: Faces to use; cover["title_font"] overrides the title face
         title_at_bottom: Stack the title and starring line just above the footer instead of at the top,
             for art whose head reaches up into the title block (the title must never cover the face)
+
+    Every line stays inside SAFE_TOP, SAFE_BOTTOM and SAFE_WIDTH, so none is printed in a printer's margin.
     """
     fonts = fonts or CoverFonts()
     page = image.convert("RGBA")
     page.alpha_composite(_cover_shade(page.size))
     w, h = page.size
-    margin = max(12, h // 18)
-    gap, bottom = h // 50, h - margin // 2
+    margin, text_width = int(h * SAFE_TOP), int(w * SAFE_WIDTH)
+    gap, bottom = h // 50, h - math.ceil(h * SAFE_BOTTOM)
     if cover.get("footer"):
         font = ImageFont.truetype(str(fonts.footer), max(14, int(h * 0.022)))
-        fh = _shadowed_text(page, cover["footer"], font, int(w * 0.8), bottom, align_bottom=True, blur=max(3, h // 400))
+        fh = _shadowed_text(page, cover["footer"], font, text_width, bottom, align_bottom=True, blur=max(3, h // 400))
         bottom -= fh + gap
     title = cover.get("title", "")
     title_font = None
     if title:
         path = resolve_font(cover.get("title_font"), fonts.title)
         size = int(w * cover_title_scale(title) * fonts.title_scale)
-        title_font = one_line_font(path, title, size, int(w * 0.88))
+        title_font = one_line_font(path, title, size, text_width)
     starring_font = ImageFont.truetype(str(fonts.starring), max(18, int(h * 0.026))) if cover.get("starring") else None
     if title_at_bottom:  # starring right above the footer, the title above it, both in the bottom shade
         if starring_font:
-            bottom -= _shadowed_text(page, cover["starring"], starring_font, int(w * 0.8), bottom, align_bottom=True, blur=max(3, h // 400)) + gap
+            bottom -= _shadowed_text(page, cover["starring"], starring_font, text_width, bottom, align_bottom=True, blur=max(3, h // 400)) + gap
         if title_font:
             _shadowed_text(page, title, title_font, w, bottom, align_bottom=True, blur=max(4, h // 250))
         return page.convert("RGB")
     th = _shadowed_text(page, title, title_font, w, margin, blur=max(4, h // 250)) if title_font else 0
     if starring_font:
-        _shadowed_text(page, cover["starring"], starring_font, int(w * 0.8), margin + th + gap, blur=max(3, h // 400))
+        _shadowed_text(page, cover["starring"], starring_font, text_width, margin + th + gap, blur=max(3, h // 400))
     return page.convert("RGB")
