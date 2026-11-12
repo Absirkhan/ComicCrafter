@@ -187,9 +187,13 @@ Queue a job from Python with `generate_book_comic.delay("book.pdf", first_chapte
   kinds are drawn as speech. The script writer picks one per line.
 - **Lettering**: a bundled Hebrew + Latin font (`assets/fonts/Assistant-SemiBold.ttf`), so Latin names
   inside Hebrew text are drawn on any system. Use your own with `RenderOptions(font_path=...)` or
-  `render_dialogue(..., font_path=...)`. Captions wrap at 40% of the panel width. They go in the corner
-  the vision model picks, unless that corner covers a speaker's head. A caption in the corner read
-  second keeps the band above its bottom free of bubbles, so the caption is read first. An optional
+  `render_dialogue(..., font_path=...)`. Captions wrap at 46% of the image width (other widths are
+  tried when the lettering does not fit). A caption is always fixed in a top corner of its image, on strip
+  panels and full-page splashes alike: the corner read first (top-left, top-right in Hebrew), or the other
+  top corner when the first would cover a face or another protected subject. It never floats lower; when
+  both corners cover a subject, the text shape that covers least is used. No bubble or bubble tail touches
+  the caption: a bubble goes where its tail misses it. A caption in the corner read second keeps the band
+  above its bottom free of bubbles, so the caption is read first. An optional
   `note` is drawn in the last-read bottom corner.
 - **Image quality**: the writer starts every scene with a shot label. Panel 1 must be an establishing
   shot and every page needs at least two different shots; a page that breaks this rule is written once

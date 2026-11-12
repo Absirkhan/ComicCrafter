@@ -1,16 +1,16 @@
 """Draw comic bubbles (speech, thought, shout, ...) with tails, and narration captions."""
 
 import math
-from typing import List, Optional, Sequence, Tuple
+from typing import Callable, List, Optional, Sequence, Tuple
 
 from PIL import Image, ImageDraw
 
 from layout import bubble_shapes as shapes
 from layout.bubble_planner import BubblePlan
-from layout.captions import draw_caption, place_caption  # noqa: F401  (draw_caption re-exported)
+from layout.captions import caption_corner, draw_caption, place_caption  # noqa: F401  (draw_caption re-exported)
 from layout.lettering import (  # noqa: F401  (re-exported for existing callers)
     CAPTION_FILL, FONT_CANDIDATES, HEBREW_CHARS, HEBREW_FONT_CANDIDATES, INK, PAPER, Rect, _font, _hits, _wrap,
-    is_rtl,
+    is_rtl, polygon_hits_rect,
 )
 from utils import get_logger
 
@@ -33,6 +33,17 @@ def _tail(cx: float, cy: float, rx: float, ry: float, target: Tuple[float, float
         for s in (-1, 1)
     ]
     return [base[0], tip, base[1]]
+
+
+def _tail_area(kind: str, cx: float, cy: float, rx: float, ry: float, target: Tuple[float, float],
+               max_len: float, line_width: int) -> List[Tuple[float, float]]:
+    """Convex outline of everything the bubble's tail inks, for keeping it off the caption."""
+    if kind == "thought":
+        reach = shapes.REACH["thought"]
+        return shapes.tail_band(cx, cy, rx * reach, ry * reach, target, 0.8, math.inf, ry * reach * 0.16 + line_width)
+    if kind == "broadcast":
+        return shapes.tail_band(cx, cy, rx, ry, target, 0.7, max_len, max(6.0, ry * 0.22) + line_width)
+    return _tail(cx, cy, rx, ry, target, max_len)
 
 
 def _shrink(points: List[Tuple[float, float]], amount: float) -> List[Tuple[float, float]]:
@@ -58,15 +69,18 @@ def _choose_position(
     desired: Tuple[float, float],
     speaker: Optional[Tuple[float, float]],
     obstacles: List[Rect],
+    blocked: Optional[Callable[[int, int], bool]] = None,
 ) -> Tuple[int, int]:
-    """Top-left corner for a bubble: free of obstacles, near the desired spot, preferably above the speaker."""
+    """Top-left corner for a bubble: free of obstacles, near the desired spot, preferably above the speaker.
+
+    blocked(x0, y0) rules a spot out for another reason (its tail would cross the caption)."""
     w, h = size
     bw, bh = bubble
     gap = max(6, h // 80)
     best, best_score = None, float("inf")
     for y0 in range(5, max(6, h - bh - 5), max(4, h // 40)):
         for x0 in range(5, max(6, w - bw - 5), max(4, w // 60)):
-            if any(_hits((x0, y0, bw, bh), o, gap) for o in obstacles):
+            if any(_hits((x0, y0, bw, bh), o, gap) for o in obstacles) or (blocked and blocked(x0, y0)):
                 continue
             cx, cy = x0 + bw / 2, y0 + bh / 2
             score = math.hypot(cx - desired[0], cy - desired[1])
@@ -90,6 +104,7 @@ def draw_speech_bubble(
     font_path: Optional[str] = None,
     wrap_share: Optional[float] = None,
     type_height: Optional[int] = None,
+    tail_clear: Sequence[Rect] = (),
 ) -> None:
     """Draw a bubble of the given kind near center with a tail toward the speaker.
 
@@ -102,6 +117,8 @@ def draw_speech_bubble(
         kind: One of bubble_shapes.BUBBLE_KINDS; anything else is drawn as "speech"
         font_path: Lettering font file (defaults to the bundled/system fonts)
         type_height: Panel height the type and lines are sized for (default: the image's own height)
+        tail_clear: Boxes no tail may cross (the caption): the bubble goes where its tail misses them,
+            and loses the tail when no such spot exists
     """
     kind = shapes.bubble_kind(kind)
     w, h = image.size
@@ -121,17 +138,24 @@ def draw_speech_bubble(
     reach = shapes.REACH.get(kind, 1.0)
     bw, bh = int(2 * rx * reach), int(2 * ry * reach)
 
-    x0, y0 = _choose_position(
-        (w, h),
-        (bw, bh),
-        (center[0] * w, center[1] * h),
-        (speaker[0] * w, speaker[1] * h) if speaker else None,
-        placed,
-    )
-    placed.append((x0, y0, bw, bh))
-    cx, cy = x0 + bw / 2, y0 + bh / 2
     # An unseen mouth gives no direction: never invent a tail toward a random panel edge.
     target = (speaker[0] * w, speaker[1] * h) if speaker else None
+    gap = max(6, h // 80)
+
+    def tail_crosses(x0: int, y0: int) -> bool:
+        area = _tail_area(kind, x0 + bw / 2, y0 + bh / 2, rx, ry, target, h * 0.14, line_width)
+        return any(polygon_hits_rect(area, box, gap) for box in tail_clear)
+
+    spot = ((w, h), (bw, bh), (center[0] * w, center[1] * h), target, placed)
+    try:
+        x0, y0 = _choose_position(*spot, tail_crosses if target and tail_clear else None)
+    except ValueError:
+        if not (target and tail_clear):
+            raise
+        x0, y0 = _choose_position(*spot)  # the caption keeps its corner; the bubble gives up its tail
+        target = None
+    placed.append((x0, y0, bw, bh))
+    cx, cy = x0 + bw / 2, y0 + bh / 2
     tail = None
     if target is not None:
         if kind == "thought":
@@ -161,6 +185,13 @@ def draw_speech_bubble(
     draw.multiline_text(origin, wrapped, font=font, fill=colour, align="center")
 
 
+def _subjects(plan: BubblePlan, size: Tuple[int, int]) -> List[Rect]:
+    """Every visible speaker's head and every protected subject: kept clear of all lettering."""
+    w, h = size
+    return [head_box(s, size) for s in plan.speakers if s] + [
+        (int(x * w), int(y * h), int(bw * w), int(bh * h)) for x, y, bw, bh in plan.protected]
+
+
 def _render_dialogue_once(
     image: Image.Image,
     dialogue: List[str],
@@ -187,36 +218,45 @@ def _render_dialogue_once(
     """
     panel = image.convert("RGB").copy()
     rtl = any(is_rtl(t) for t in list(dialogue) + [caption]) if rtl is None else rtl
-    # Every visible speaker's head is kept clear of all bubbles
-    heads: List[Rect] = [head_box(s, panel.size) for s in plan.speakers if s]
-    protected = [(int(x * panel.width), int(y * panel.height), int(w * panel.width), int(h * panel.height))
-                 for x, y, w, h in plan.protected]
-    heads += protected
+    heads = _subjects(plan, panel.size)
     placed = list(heads) + list(reserved)
 
+    captions: List[Rect] = []
     if caption:
-        # Narration is read first, so it starts in the reading-first corner (top-right for Hebrew)
-        # and moves only when that corner would cover a speaker's head.
-        reading_first = "top-right" if rtl else "top-left"
-        other = "top-left" if rtl else "top-right"
-        place_caption(panel, caption, (reading_first, other), heads, placed, rtl, font_path, width_share=caption_width,
-                      type_height=type_height)
+        # Narration is read first and always sits in a top corner: the reading-first one (top-right for
+        # Hebrew), or the other top corner when that covers less of a protected subject.
+        captions.append(place_caption(panel, caption, heads, placed, rtl, font_path, width_share=caption_width,
+                                      type_height=type_height))
     kinds = list(kinds or []) + ["speech"] * (len(dialogue) - len(kinds or []))
     for text, center, speaker, kind in zip(dialogue, plan.bubbles, plan.speakers, kinds):
-        draw_speech_bubble(panel, text, center, speaker, placed, kind, font_path, wrap_share, type_height)
+        draw_speech_bubble(panel, text, center, speaker, placed, kind, font_path, wrap_share, type_height,
+                           captions)
 
     logger.debug(f"Drew {len(dialogue)} bubbles{' and a caption' if caption else ''}")
     return panel
 
 
+SHAPES = ((None, 0.46), (0.45, 0.65), (0.62, 0.88), (0.24, 0.34))  # bubble wrap share, caption width share
+
+
 def render_dialogue(image, dialogue, caption, plan, kinds=None, rtl=None, font_path=None, reserved=(), type_height=None):
     """Try alternative readable text shapes on fresh copies; never shrink or crop artwork.
+
+    The caption is always in a top corner of the image and no bubble or tail touches it (every lettered
+    image: strip panels and full-page splashes). Shapes whose caption covers no protected subject come
+    first; when no shape manages that, the one whose caption covers least still keeps its top corner.
 
     type_height sizes the type as for a panel of that height, so a full-page splash letters like a strip panel.
     Wider shapes suit a calm band; the last, narrow shape (same font size, more lines) suits one calm side
     beside a close-up's face (book_comic/lettering_space.py).
     """
-    for wrap_share, caption_width in ((None, 0.46), (0.45, 0.65), (0.62, 0.88), (0.24, 0.34)):
+    shapes = SHAPES
+    if caption:
+        direction = any(is_rtl(t) for t in list(dialogue) + [caption]) if rtl is None else rtl
+        heads = _subjects(plan, image.size)
+        shapes = sorted(SHAPES, key=lambda shape: caption_corner(  # stable: equal cover keeps the order above
+            image, caption, heads, direction, font_path, shape[1], type_height)[1])
+    for wrap_share, caption_width in shapes:
         try:
             return _render_dialogue_once(image, dialogue, caption, plan, kinds, rtl, font_path,
                                          reserved, wrap_share, caption_width, type_height)

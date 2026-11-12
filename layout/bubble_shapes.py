@@ -64,6 +64,17 @@ def grow(points: Points, amount: float) -> Points:
     return out
 
 
+def tail_band(cx, cy, rx, ry, target, share: float, max_len: float, half_width: float) -> Points:
+    """The strip a thought or broadcast tail is drawn in: from the ellipse edge toward the target."""
+    ex, ey, _ = ellipse_edge(cx, cy, rx, ry, *target)
+    dx, dy = target[0] - ex, target[1] - ey
+    dist = math.hypot(dx, dy) or 1.0
+    length = min(dist * share, max_len)
+    ux, uy, px, py = dx / dist, dy / dist, -dy / dist * half_width, dx / dist * half_width
+    end = (ex + ux * length, ey + uy * length)
+    return [(ex + px, ey + py), (end[0] + px, end[1] + py), (end[0] - px, end[1] - py), (ex - px, ey - py)]
+
+
 def thought_tail(draw: ImageDraw.ImageDraw, cx, cy, rx, ry, target, line_width: int) -> None:
     """A chain of shrinking circles toward the speaker's head instead of a pointed tail."""
     ex, ey, _ = ellipse_edge(cx, cy, rx, ry, *target)
