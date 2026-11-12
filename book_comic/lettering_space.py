@@ -1,9 +1,9 @@
 """Where a lettered panel leaves room for its caption and bubbles, per shot, and what the checker may say about it.
 
-The lettering (layout.captions / layout.comic_bubbles) is placed after drawing: a caption starts in a top
-corner and otherwise searches the whole panel, and bubbles search the whole panel, both only avoiding the
-protected faces, focal hands and props the planner marks. So lettering needs one calm area somewhere, not
-a clear upper third. A clear upper third is natural only when the figure is small (extreme long and wide
+The lettering (layout.captions / layout.comic_bubbles) is placed after drawing: a caption is fixed in a top
+corner (the one that covers less of the protected faces, focal hands and props the planner marks), and
+bubbles search the whole panel, avoiding those subjects and the caption. So bubbles need one calm area
+somewhere, not a clear upper third. A clear upper third is natural only when the figure is small (extreme long and wide
 shots: sky, ceiling or upper wall above it). Asking for it in a medium shot or close-up fought the hard
 crop (framing.py): the vision checker rejected correct art "to keep the upper third clear of the head".
 """

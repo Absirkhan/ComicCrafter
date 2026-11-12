@@ -1,13 +1,11 @@
 """Narration captions and dedication notes: boxed text in a panel corner."""
 
-import math
-from typing import List, Optional, Sequence
+from typing import List, Optional, Tuple
 
 from PIL import Image, ImageDraw
 
 from layout.lettering import CAPTION_FILL, INK, Rect, _font, _wrap, is_rtl, overlap_area
 
-CORNERS = ("top-left", "top-right", "bottom-left", "bottom-right")
 CAPTION_WIDTH = 0.46  # wrap width as a share of the panel; narrower turns two sentences into a tall column
 CAPTION_SIZE = 0.045  # font size as a share of the panel height
 NOTE_SIZE = 0.035
@@ -21,7 +19,6 @@ def text_box(
     corner: str,
     font_path: Optional[str] = None,
     dry: bool = False,
-    position=None,
     width_share: float = CAPTION_WIDTH,
 ) -> Rect:
     """Draw (or with dry=True only measure) one boxed text block in a corner; returns its rectangle."""
@@ -35,8 +32,6 @@ def text_box(
     margin = max(8, h // 40)
     x0 = margin if corner.endswith("left") else w - bw - margin
     y0 = margin if corner.startswith("top") else h - bh - margin
-    if position is not None:
-        x0, y0 = position
     if x0 < 0 or y0 < 0 or x0 + bw > w or y0 + bh > h:
         raise ValueError("comic_lettering_overflow")
     if not dry:
@@ -47,70 +42,64 @@ def text_box(
 
 def draw_caption(
     image: Image.Image, text: str, corner: str, placed: List[Rect], font_path: Optional[str] = None,
-    position=None, width_share: float = CAPTION_WIDTH, type_height: Optional[int] = None,
+    width_share: float = CAPTION_WIDTH, type_height: Optional[int] = None,
 ) -> Rect:
     """Draw a rectangular narration caption in a corner; its box is added to placed.
 
     type_height: panel height the type is sized for (default: the image's own height)."""
     h = type_height or image.size[1]
     box = text_box(ImageDraw.Draw(image), image.size, text, max(14, int(h * CAPTION_SIZE)), corner, font_path,
-                   position=position, width_share=width_share)
+                   width_share=width_share)
     placed.append(box)
     return box
+
+
+def caption_corner(
+    image: Image.Image, text: str, heads: List[Rect], rtl: bool, font_path: Optional[str] = None,
+    width_share: float = CAPTION_WIDTH, type_height: Optional[int] = None,
+) -> Tuple[str, int]:
+    """The top corner a caption takes, and the area of the protected subjects in heads it covers there.
+
+    It starts in the corner read first (top-left, or top-right in a right-to-left comic) and takes the
+    other top corner only when that one is clear of the subjects, or covers less than half as much.
+    """
+    draw = ImageDraw.Draw(image)
+    font_size = max(14, int((type_height or image.size[1]) * CAPTION_SIZE))
+
+    def covered(corner: str) -> int:
+        box = text_box(draw, image.size, text, font_size, corner, font_path, dry=True, width_share=width_share)
+        return sum(overlap_area(box, head) for head in heads)
+
+    reading_first, other = ("top-right", "top-left") if rtl else ("top-left", "top-right")
+    first, second = covered(reading_first), covered(other)
+    return (other, second) if second * 2 < first else (reading_first, first)
 
 
 def place_caption(
     image: Image.Image,
     text: str,
-    corners: Sequence[str],
     heads: List[Rect],
     placed: List[Rect],
     rtl: bool,
     font_path: Optional[str] = None,
     width_share: float = CAPTION_WIDTH,
     type_height: Optional[int] = None,
-) -> str:
-    """Draw the caption in whichever of corners covers the least of the speakers' heads.
+) -> Rect:
+    """Draw the caption in a top corner of the image (caption_corner), always: it never floats lower.
 
-    Ties keep the earlier corner, so pass the preferred (e.g. vision-model chosen) corner first.
-    The caption is read first: in the corner a reader reaches later (top-left in a right-to-left
-    comic), a bubble beside it would be read before it, so the band down to its bottom stays clear.
+    In the corner a reader reaches later, a bubble beside the caption would be read before it, so the
+    band down to its bottom stays clear.
 
     type_height sizes the type as for a panel of that height (default: the image's own height).
 
     Returns:
-        The corner used
+        The caption's rectangle (also added to placed)
     """
-    w, h = image.size
-    draw = ImageDraw.Draw(image)
-    font_size = max(14, int((type_height or h) * CAPTION_SIZE))
-    corner = min(corners, key=lambda c: sum(
-        overlap_area(text_box(draw, image.size, text, font_size, c, font_path, dry=True, width_share=width_share), head) for head in heads
-    ))
-    candidate = text_box(draw, image.size, text, font_size, corner, font_path, dry=True, width_share=width_share)
-    position = None
-    if any(overlap_area(candidate, head) for head in heads):
-        # Two occupied corners do not mean the entire panel has no space. Search from
-        # top to bottom, preserving the reading side and all protected focal subjects.
-        bw, bh = (math.ceil(value) for value in candidate[2:])
-        margin = max(8, h // 40)
-        xs = list(range(margin, max(margin + 1, w - bw - margin + 1), max(4, w // 60)))
-        if rtl:
-            xs.reverse()
-        for y in range(margin, max(margin + 1, h - bh - margin + 1), max(4, h // 40)):
-            for x in xs:
-                if not any(overlap_area((x, y, bw, bh), head) for head in heads):
-                    position = (x, y)
-                    break
-            if position is not None:
-                break
-        if position is None:
-            raise ValueError("comic_lettering_no_space")
-    box = draw_caption(image, text, corner, placed, font_path, position=position, width_share=width_share,
-                       type_height=type_height)
-    if position is not None or corner != ("top-right" if rtl else "top-left"):
-        placed.append((0, 0, w, box[1] + box[3]))
-    return corner
+    corner, _ = caption_corner(image, text, heads, rtl, font_path, width_share, type_height)
+    box = draw_caption(image, text, corner, placed, font_path, width_share=width_share, type_height=type_height)
+    if corner != ("top-right" if rtl else "top-left"):
+        placed.append((0, 0, image.size[0], box[1] + box[3]))
+    return box
 
 
 def note_corner(rtl: bool) -> str:

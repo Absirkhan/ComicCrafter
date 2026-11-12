@@ -63,3 +63,13 @@ def no_check_backoff(monkeypatch):
     """A failed art-check call waits before its retry (art_check.CHECK_BACKOFF_SECONDS); tests never really sleep."""
     import book_comic.art_check as art_check
     monkeypatch.setattr(art_check.time, "sleep", lambda seconds: None)
+
+
+def caption_box(image: Image.Image):
+    """(left, top, right, bottom) of the caption drawn on plain test art, from its fill colour and outline."""
+    import numpy as np
+    from layout.lettering import CAPTION_FILL
+    rows, cols = np.where(np.all(np.asarray(image.convert("RGB")) == CAPTION_FILL, axis=2))
+    assert len(rows), "no caption was drawn"
+    line = max(2, image.height // 300)
+    return int(cols.min()) - line, int(rows.min()) - line, int(cols.max()) + line, int(rows.max()) + line

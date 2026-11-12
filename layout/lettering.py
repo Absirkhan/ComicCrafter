@@ -3,7 +3,7 @@
 import re
 from functools import lru_cache
 from pathlib import Path
-from typing import Optional, Tuple
+from typing import Optional, Sequence, Tuple
 
 from PIL import ImageDraw, ImageFont
 
@@ -106,3 +106,16 @@ def overlap_area(a: Rect, b: Rect) -> int:
     width = min(a[0] + a[2], b[0] + b[2]) - max(a[0], b[0])
     height = min(a[1] + a[3], b[1] + b[3]) - max(a[1], b[1])
     return max(0, width) * max(0, height)
+
+
+def polygon_hits_rect(points: Sequence[Tuple[float, float]], rect: Rect, gap: float = 0) -> bool:
+    """Whether a convex polygon (a bubble tail) comes within gap of a rectangle (separating axes)."""
+    x0, y0, x1, y1 = rect[0] - gap, rect[1] - gap, rect[0] + rect[2] + gap, rect[1] + rect[3] + gap
+    corners = [(x0, y0), (x1, y0), (x1, y1), (x0, y1)]
+    edges = zip(points, list(points[1:]) + list(points[:1]))
+    for nx, ny in [(1, 0), (0, 1)] + [(ay - by, bx - ax) for (ax, ay), (bx, by) in edges]:
+        a = [x * nx + y * ny for x, y in points]
+        b = [x * nx + y * ny for x, y in corners]
+        if max(a) < min(b) or max(b) < min(a):
+            return False
+    return True
