@@ -13,6 +13,8 @@ from typing import Dict, Iterable, List, Optional, Sequence, Tuple
 
 from PIL import Image
 
+from book_comic.check_tolerance import hidden
+
 logger = logging.getLogger(__name__)
 
 CHECK_NAMES = ("has_text", "bad_anatomy", "identity_mismatch", "design_mismatch", "scene_mismatch",
@@ -38,7 +40,9 @@ def requirement_failed(check: Dict, requirement: Dict) -> bool:
     the fallback ranking and the fresh third draw."""
     observed = str(check.get("observed", "")).strip().lower()
     expected = str(requirement.get("expected", "")).strip().lower()
-    if observed == "not_visible" and requirement.get("attribute") == "design":
+    if hidden(observed):
+        # The checker could not see it (too small, too far, occluded): not a wrong state, whatever "matches" says.
+        # BOOKS-44 page 1, an extreme long shot: "state: expected closed, saw not visible" failed three draws in a row.
         return False
     if requirement.get("attribute") == "framing":
         return False  # a limb-only framing row is observed only, never a reason (art_check.inspect_art)
@@ -46,7 +50,7 @@ def requirement_failed(check: Dict, requirement: Dict) -> bool:
     # word other than the expected one ("standing" for kneeling; free text like "the door is wide open" is not one).
     literal = (requirement.get("attribute") == "hand"
                or (requirement.get("attribute") in ("pose", "state") and expected in LITERAL_STATES and observed in LITERAL_STATES))
-    return check.get("matches") is not True or observed == "not_visible" or (literal and observed != expected)
+    return check.get("matches") is not True or (literal and observed != expected)
 
 
 # The checker's fixed answers for pose, state, hand side and framing: safe to show next to each other.
@@ -69,8 +73,8 @@ def unmet_requirements(found: Dict, requirements: Sequence[Dict]) -> List[Tuple[
     """(check, requirement) for every row the check saw unmet, the rows paired by the check's own index.
 
     The one definition shared by the rejected-art reasons, the revision and the fresh third draw: a row fails when
-    the checker says so, when the state is hidden, or when a literal contradiction (hand side, pose, state) was waved
-    through with matches=true; a framing row never fails (observed only)."""
+    the checker says so, or when a literal contradiction (hand side, pose, state) was waved
+    through with matches=true; a framing row (observed only) and a row the checker could not see never fail."""
     pairs = []
     for check in found.get("requirement_checks") or []:
         index = check.get("index") if isinstance(check, dict) else None
