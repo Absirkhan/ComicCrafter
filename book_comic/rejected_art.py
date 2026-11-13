@@ -13,11 +13,12 @@ from typing import Dict, Iterable, List, Optional, Sequence, Tuple
 
 from PIL import Image
 
-from book_comic.check_tolerance import hidden
+from book_comic.check_tolerance import hidden, marks_only_row
+from book_comic.staging_tolerance import still_held
 
 logger = logging.getLogger(__name__)
 
-CHECK_NAMES = ("has_text", "bad_anatomy", "identity_mismatch", "design_mismatch", "scene_mismatch",
+CHECK_NAMES = ("has_text", "bad_anatomy", "squashed_figure", "identity_mismatch", "design_mismatch", "scene_mismatch",
                "requirement_mismatch", "prop_mismatch", "prop_shape_mismatch", "figure_visible")
 UNAVAILABLE = "check_unavailable"
 MAX_SAVED = 12
@@ -44,6 +45,10 @@ def requirement_failed(check: Dict, requirement: Dict) -> bool:
         # The checker could not see it (too small, too far, occluded): not a wrong state, whatever "matches" says.
         # BOOKS-44 page 1, an extreme long shot: "state: expected closed, saw not visible" failed three draws in a row.
         return False
+    if requirement.get("attribute") == "contact" and still_held(observed, expected):
+        return False  # the same object is held: grip, hand count and where it is held are advisory (staging_tolerance)
+    if requirement.get("attribute") == "design" and marks_only_row(observed, requirement.get("subject")):
+        return False  # pseudo-lettering on the hero's map is how a map is drawn (check_tolerance)
     if requirement.get("attribute") == "framing":
         return False  # a limb-only framing row is observed only, never a reason (art_check.inspect_art)
     # A literal contradiction the checker waved through with matches=true: a hand side, or a vocabulary pose/state

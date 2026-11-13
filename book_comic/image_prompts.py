@@ -85,7 +85,7 @@ def canvas_shape(size: Optional[Tuple[int, int]]) -> str:
     if ratio >= 1.25:
         return (f"Canvas: a landscape frame about {ratio:.1f} times as wide as it is tall. Compose horizontally: the "
                 "setting spreads across the full width to both side edges, with the whole figure standing inside it "
-                "(smaller if needed to fit head to feet); never a narrower upright picture in the middle.\n")
+                "(smaller if needed to fit head to feet, never shortened or squashed to fit); never a narrower upright picture in the middle.\n")
     if ratio <= 0.8:
         return (f"Canvas: a portrait frame about {1 / ratio:.1f} times as tall as it is wide. The setting fills the "
                 "full height and width to every edge.\n")

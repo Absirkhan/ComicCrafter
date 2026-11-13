@@ -33,6 +33,15 @@ def test_the_override_is_part_of_the_one_no_text_rule():
     assert "simple icons" not in NO_TEXT_RULE  # an icon is a symbol: no line asks for one any more
 
 
+def test_a_map_is_colour_fields_and_lines_never_a_blank_sheet():
+    # A blank map failed the prop check for its missing "blue lines and colored zones" (live comic, 2026-11-12).
+    blank, drawn = WORDLESS_OVERRIDE.split("; ")[1:]
+    assert blank == "any sign, card, label, note, book page or screen is blank or plain shapes" and "map" not in blank
+    assert drawn == "a map, chart or diagram is drawn as colour fields, lines and shapes with no words, never blank."
+    assert "maps, charts and diagrams show plain colour fields, lines and shapes, never a blank sheet" in NO_TEXT_RULE
+    assert "nothing in the picture carries letters, numbers, symbols, glyphs or written marks" in WORDLESS_OVERRIDE
+
+
 @pytest.mark.parametrize("kind", ["panel", "splash", "cover", "back_cover"])
 def test_every_prompt_kind_carries_the_rule_once_after_the_scene(kind):
     prompt = _prompts()[kind]

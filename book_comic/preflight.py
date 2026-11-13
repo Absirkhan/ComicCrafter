@@ -16,7 +16,8 @@ Extract each scene's explicit visible acceptance requirements (at most eight per
 contact, direction of motion and important design details. Use attribute "pose" for Hero's posture and "state" for an
 object's open/closed or flat/upright state. For these use single exact values such as standing, kneeling, seated,
 crouching, open, closed, flat, upright. Use "contact", "direction" or "design" for other requirements, with concise
-English expected facts. Subjects use Hero or the exact name of an established prop. Include explicit closed/open,
+English expected facts. For an object Hero holds or uses, the contact fact is that Hero holds it: do not turn the
+grip, the number of hands, which hand or where it is held into a requirement. Subjects use Hero or the exact name of an established prop. Include explicit closed/open,
 standing/kneeling and flat/upright instructions even when narration doesn't mention them. Never relax these to make
 an easier image. Only extract facts explicitly stated in that scene; do not infer unseen posture or action. In a hands/feet detail shot, do not add a Hero pose requirement such as standing unless explicitly requested, and do not require a face. If approved inputs contradict one another, return
 false for the affected check instead of changing the scene. A resting case has no specified upright/flat state.

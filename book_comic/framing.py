@@ -10,7 +10,7 @@ no orientation line.
 import re
 from typing import Dict, List, Optional, Sequence, Tuple
 
-from book_comic.comic_rules import SINGLE_IMAGE_RULE, scene_shot
+from book_comic.comic_rules import PROPORTION_RULE, SINGLE_IMAGE_RULE, scene_shot
 from book_comic.scene_requirements import scene_requirements
 
 SHOT_FRAMING = {
@@ -24,7 +24,7 @@ SHOT_FRAMING = {
         "WIDE SHOT: the whole body is visible from the top of the head to the feet, with clear space around the "
         "figure on every side and the setting readable; the figure fills at most about two-thirds of the image "
         "height. Do not crop off the head or the feet: both shoes and the ground they stand on are drawn above the "
-        "bottom edge, with a strip of floor or ground visible below them."
+        "bottom edge, with a strip of floor or ground visible below them. " + PROPORTION_RULE
     ),
     "Medium shot": (
         "MEDIUM SHOT: crop at the waist. Show the character from the top of the head down to the waist only; "
